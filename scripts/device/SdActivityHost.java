@@ -87,9 +87,12 @@ public final class SdActivityHost {
         refreshTask();
         System.err.println("SDACTIVITY=host_visibility|foreground="+active+"|activity="+e.info.name);
     }
-    private static void launch(Intent request)throws Exception{launch(request,null,null,-1,null);}
-    private static void launch(Intent request,IBinder resultTo,String resultWho,int requestCode)throws Exception{launch(request,resultTo,resultWho,requestCode,null);}
-    private static void launch(Intent request,IBinder resultTo,String resultWho,int requestCode,IBinder remoteResult)throws Exception{
+    private static void launch(Intent request)throws Exception{launch(request,null,null,-1,null,null);}
+    private static void launch(Intent request,IBinder resultTo,String resultWho,int requestCode)throws Exception{
+        String referrer=resultTo==null?SdApkPackage.NAME:find(resultTo).info.packageName;
+        launch(request,resultTo,resultWho,requestCode,null,referrer);
+    }
+    private static void launch(Intent request,IBinder resultTo,String resultWho,int requestCode,IBinder remoteResult,String referrer)throws Exception{
         if(Looper.myLooper()!=Looper.getMainLooper())throw new IllegalStateException("Activity launch must use main Looper");
         if(!SdWindowHost.isStarted())SdRuntime.ensureUiHost();
         List<ResolveInfo> candidates=SdApkPackage.resolveActivities(request,request.getType(),0);
@@ -121,11 +124,14 @@ public final class SdActivityHost {
         if(previous!=null&&previous.activity!=null)pause(previous);
         SdServices.registerActivity(e.token,info,e.intent,SdDisplayShim.DISPLAY_ID);stack.add(e);refreshTask();
         ClientTransaction transaction=ClientTransaction.obtain(thread.getApplicationThread(),e.token);
-        transaction.addCallback(LaunchActivityItem.obtain(e.intent,++ident,info,displayConfiguration(),new Configuration(),CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,null,null,hostVisible?ActivityManager.PROCESS_STATE_TOP:ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND,null,null,null,null,true,null));
+        // Activity.getReferrer() falls back to the launch caller's package when
+        // the Intent has no explicit referrer. Result callbacks are optional,
+        // so ordinary startActivity calls must retain their caller too.
+        transaction.addCallback(LaunchActivityItem.obtain(e.intent,++ident,info,displayConfiguration(),new Configuration(),CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,referrer,null,hostVisible?ActivityManager.PROCESS_STATE_TOP:ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND,null,null,null,null,true,null));
         transaction.setLifecycleStateRequest(ResumeActivityItem.obtain(true));
         transaction.schedule();
         final Entry old=previous;
-        System.err.println("SDACTIVITY=transaction_scheduled|class="+info.name+"|stack="+stack.size());
+        System.err.println("SDACTIVITY=transaction_scheduled|class="+info.name+"|stack="+stack.size()+"|referrer="+referrer);
         verifyLaunch(thread,e,old,0);
     }
     public static void activityRelaunched(IBinder token){
@@ -191,7 +197,7 @@ public final class SdActivityHost {
     public static void requestRemoteStart(final Intent intent,final IBinder callback){
         final Intent snapshot=new Intent(intent);
         post(new Runnable(){public void run(){try{
-            SdRuntime.ensureUiHost();launch(snapshot,null,null,-1,callback);
+            SdRuntime.ensureUiHost();launch(snapshot,null,null,-1,callback,SdApkPackage.NAME);
         }catch(Exception failure){
             try{SdRemoteActivities.finish(callback,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
             throw new IllegalStateException("Remote Activity launch failed",failure);
@@ -211,7 +217,7 @@ public final class SdActivityHost {
             requestPermissions(intent,resultTo,resultWho,requestCode);return;
         }
         if(SdApkPackage.resolveActivities(intent,intent.getType(),0).isEmpty())throw new ActivityNotFoundException(intent.toString());
-        if(requestCode>=0)find(resultTo);
+        if(resultTo!=null||requestCode>=0)find(resultTo);
         final Intent snapshot=new Intent(intent);
         post(new Runnable(){public void run(){try{launch(snapshot,resultTo,resultWho,requestCode);}catch(Exception e){throw new IllegalStateException("Activity launch failed",e);}}});
     }
@@ -284,7 +290,7 @@ public final class SdActivityHost {
             if(!stack.contains(source)||!stack.contains(parent))return;
             pause(stack.get(stack.size()-1));
             if(reuseParent)ActivityThread.currentActivityThread().getInstrumentation().callActivityOnNewIntent(parent.activity,intent);
-            else try{launch(intent);}catch(Exception failure){throw new IllegalStateException("Up Activity launch failed",failure);}
+            else try{launch(intent,source.token,null,-1);}catch(Exception failure){throw new IllegalStateException("Up Activity launch failed",failure);}
             Entry last=children.get(children.size()-1);
             for(Entry child:children){
                 if(!stack.contains(child))continue;
