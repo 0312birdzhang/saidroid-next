@@ -54,6 +54,14 @@ public final class SdPackageManagerService implements InvocationHandler {
         if(n.equals("getPackageGids")){if(app((String)a[0])==null)return null;String groups=new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/proc/self/status")),"UTF-8");for(String line:groups.split("\n"))if(line.startsWith("Groups:")){String value=line.substring(7).trim();if(value.isEmpty())return new int[0];String[] parts=value.split("\\s+");int[] ids=new int[parts.length];for(int i=0;i<parts.length;i++)ids[i]=Integer.parseInt(parts[i]);return ids;}throw new IllegalStateException("Process group information unavailable");}
         if(n.equals("checkPermission"))return permission((String)a[0],(String)a[1]);
         if(n.equals("checkUidPermission"))return (Integer)a[1]==Process.myUid()?permission((String)a[0],SdApkPackage.NAME):PackageManager.PERMISSION_DENIED;
+        if(n.equals("shouldShowRequestPermissionRationale")){
+            if((Integer)a[2]!=Process.myUid()/100000)throw new SecurityException("Cross-user permission rationale query unavailable");
+            if(!SdApkPackage.NAME.equals(a[1])&&SdInstrumentation.applicationInfo((String)a[1])==null)throw new SecurityException("Permission rationale package mismatch");
+            permission((String)a[0],(String)a[1]);
+            // Rationale requires a previous user denial. This permission
+            // backend has no interactive grants or user-denial history.
+            return false;
+        }
         if(n.equals("isPackageAvailable"))return app((String)a[0])!=null;
         if(n.equals("isInstantApp")){
             if((Integer)a[1]!=Process.myUid()/100000)throw new SecurityException("Cross-user instant application query unavailable");

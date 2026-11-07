@@ -10,10 +10,19 @@ public final class SdAudio implements InvocationHandler {
     private final IAudioService service;
     private static final SdAudio instance=new SdAudio();
     private static JSONObject snapshot;private static long sampled;private static volatile int portGeneration=1;
-    private static native void nativeInstall();
+    private static native void nativeInstall(Class<?> channelOwner);
     private SdAudio(){service=(IAudioService)Proxy.newProxyInstance(IAudioService.class.getClassLoader(),new Class<?>[]{IAudioService.class},this);binder.attachInterface(service,"android.media.IAudioService");}
     public static IBinder binder(){return instance.binder;}
-    public static void install(){System.load(System.getenv("ANDROID_ROOT")+"/lib/libsdhostapi.so");nativeInstall();SdCamera.install();}
+    public static void install(){
+        System.load(System.getenv("ANDROID_ROOT")+"/lib/libsdhostapi.so");
+        try{
+            // Android 9 moved this constant getter to AudioTrack. Resolve the
+            // class without running its initializer before JNI is registered.
+            String owner=Build.VERSION.SDK_INT>=29?"android.media.AudioSystem":"android.media.AudioTrack";
+            nativeInstall(Class.forName(owner,false,SdAudio.class.getClassLoader()));
+        }catch(ClassNotFoundException failure){throw new IllegalStateException("Audio channel constant owner unavailable",failure);}
+        SdCamera.install();
+    }
     private static synchronized JSONObject snapshot()throws Exception{
         long now=SystemClock.uptimeMillis();if(snapshot==null||now-sampled>250){snapshot=new JSONObject(org.saildroid.host.HostApi.audioSnapshot());sampled=now;}return snapshot;
     }

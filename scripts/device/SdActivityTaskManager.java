@@ -6,7 +6,7 @@ import java.lang.reflect.*;
 public final class SdActivityTaskManager implements InvocationHandler {
     private static final SdActivityTaskManager instance=new SdActivityTaskManager();
     private static final java.util.Set<String> operations = new java.util.HashSet<String>(java.util.Arrays.asList(
-        "startActivity", "startActivityAsUser", "finishActivity", "finishSubActivity",
+        "startActivity", "startActivityAsUser", "finishActivity", "finishSubActivity", "navigateUpTo",
         "getDeviceConfigurationInfo", "isTopOfTask", "setRequestedOrientation",
         "getRequestedOrientation", "overridePendingTransition", "isInMultiWindowMode",
         "isInPictureInPictureMode", "getLaunchedFromUid", "getLaunchedFromPackage",
@@ -23,6 +23,7 @@ public final class SdActivityTaskManager implements InvocationHandler {
             SdActivityHost.requestStart(selected,(IBinder)args[4],(String)args[5],(Integer)args[6]);return android.app.ActivityManager.START_SUCCESS;
         }
         if(n.equals("finishActivity"))return SdActivityHost.requestFinish((IBinder)args[0],(Integer)args[1],(Intent)args[2]);
+        if(n.equals("navigateUpTo"))return SdActivityHost.requestNavigateUp((IBinder)args[0],(Intent)args[1],(Integer)args[2],(Intent)args[3]);
         if(n.equals("finishSubActivity")){SdActivityHost.requestFinishSubActivities((IBinder)args[0],(String)args[1],(Integer)args[2]);return null;}
         if(n.equals("getDeviceConfigurationInfo")){
             android.content.res.Configuration current=SdActivityHost.displayConfiguration();

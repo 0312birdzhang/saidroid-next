@@ -227,14 +227,53 @@ public final class SdActivityHost {
             for(Entry child:matched)requestFinish(child.token,Activity.RESULT_CANCELED,null);
         }});
     }
+    public static boolean requestNavigateUp(IBinder token,Intent destination,final int resultCode,Intent result){
+        final Entry source=find(token);
+        final Intent intent=new Intent(Objects.requireNonNull(destination));
+        List<ResolveInfo> candidates=SdApkPackage.resolveActivities(intent,intent.getType(),0);
+        if(candidates.isEmpty())return false;
+        ActivityInfo info=candidates.get(0).activityInfo;
+        Entry selected=null;
+        for(int index=stack.indexOf(source)-1;index>=0;index--){
+            Entry entry=stack.get(index);
+            if(entry.info.packageName.equals(info.packageName)&&entry.info.name.equals(info.name)){selected=entry;break;}
+        }
+        if(selected==null||selected.activity==null)return false;
+        final Entry parent=selected;
+        final boolean reuseParent=info.launchMode==ActivityInfo.LAUNCH_SINGLE_TOP
+                ||info.launchMode==ActivityInfo.LAUNCH_SINGLE_TASK
+                ||info.launchMode==ActivityInfo.LAUNCH_SINGLE_INSTANCE
+                ||(intent.getFlags()&Intent.FLAG_ACTIVITY_CLEAR_TOP)!=0;
+        final Intent resultData=result==null?null:new Intent(result);
+        final ArrayList<Entry> children=new ArrayList<Entry>(stack.subList(stack.indexOf(parent)+(reuseParent?1:0),stack.indexOf(source)+1));
+        Collections.reverse(children);
+        post(new Runnable(){public void run(){
+            if(!stack.contains(source)||!stack.contains(parent))return;
+            pause(stack.get(stack.size()-1));
+            if(reuseParent)ActivityThread.currentActivityThread().getInstrumentation().callActivityOnNewIntent(parent.activity,intent);
+            else try{launch(intent);}catch(Exception failure){throw new IllegalStateException("Up Activity launch failed",failure);}
+            Entry last=children.get(children.size()-1);
+            for(Entry child:children){
+                if(!stack.contains(child))continue;
+                int code=child==source?resultCode:Activity.RESULT_CANCELED;
+                Intent data=child==source?resultData:null;
+                requestFinish(child.token,code,data,reuseParent&&child==last);
+            }
+            System.err.println("SDACTIVITY=up_requested|from="+source.info.name+"|to="+parent.info.name+"|children="+children.size());
+        }});
+        return true;
+    }
     public static boolean requestFinish(final IBinder token,final int resultCode,final Intent result){
+        return requestFinish(token,resultCode,result,true);
+    }
+    private static boolean requestFinish(final IBinder token,final int resultCode,final Intent result,final boolean revealPrevious){
         final Entry e=find(token);
         if(System.getenv("SAILDROID_ANDROID_LOG_STDERR")!=null)new Throwable("SDACTIVITY=finish_requested|class="+e.info.name).printStackTrace();
         post(new Runnable(){public void run(){
             if(!stack.contains(e))return;
             boolean top=isTop(token);pause(e);
             Entry revealed=null;
-            if(top&&stack.size()>1)revealed=stack.get(stack.size()-2);
+            if(top&&revealPrevious&&stack.size()>1)revealed=stack.get(stack.size()-2);
             // The revealed Activity must start/resume before the finishing one
             // stops, as in Android's pause -> resume -> stop/destroy sequence.
             // Otherwise an in-app Back transition briefly has zero started

@@ -50,7 +50,6 @@ public final class SdWifi implements InvocationHandler {
     private static DhcpInfo dhcpInfo()throws org.json.JSONException,android.os.RemoteException{
         org.json.JSONObject snapshot=connection(false);
         DhcpInfo info=new DhcpInfo();
-        if(!snapshot.optString("method").equals("dhcp"))return info;
         info.ipAddress=ipv4(snapshot.optString("address"));
         info.netmask=ipv4(snapshot.optString("netmask"));
         info.gateway=ipv4(snapshot.optString("gateway"));
@@ -72,6 +71,10 @@ public final class SdWifi implements InvocationHandler {
         if(name.equals("getVerboseLoggingLevel"))return 0;
         if(name.equals("getConnectionInfo"))return connectionInfo();
         if(name.equals("getDhcpInfo"))return dhcpInfo();
+        if(name.equals("getSupportedFeatures")){
+            if(!permission(Manifest.permission.ACCESS_WIFI_STATE))throw new SecurityException("ACCESS_WIFI_STATE is not declared by this application");
+            return org.saildroid.host.HostApi.wifiSupportedFeatures();
+        }
         if(name.equals("getWifiEnabledState")){
             if(SdPackageManagerService.service().checkPermission(Manifest.permission.ACCESS_WIFI_STATE,SdApkPackage.NAME,android.os.Process.myUid()/100000)!=PackageManager.PERMISSION_GRANTED)
                 throw new SecurityException("ACCESS_WIFI_STATE is not declared by this application");
