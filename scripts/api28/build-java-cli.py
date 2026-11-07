@@ -6,10 +6,11 @@ import importlib.util
 import json
 import os
 import subprocess
+import zipfile
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
-for name in ('framework', 'r8', 'runtime-classes', 'output'):
+for name in ('framework', 'r8', 'runtime-classes', 'bootstrap-baseline', 'output'):
     parser.add_argument('--'+name, type=Path, required=True)
 parser.add_argument('--cxx', default='g++')
 parser.add_argument('--classpath-separator', default=os.pathsep)
@@ -44,11 +45,24 @@ encoder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(encoder)
 flags = encoder.encode_jar(output/'bootstrap-raw.jar', [], output/'java-cli-bootstrap.jar')
 assert flags['preserved'] == 0 and flags['private'] == flags['members']
+with zipfile.ZipFile(arguments.bootstrap_baseline) as baseline:
+    assert 'classes.dex' in baseline.namelist() and 'classes2.dex' in baseline.namelist()
+    retained = {info.filename: hashlib.sha256(baseline.read(info.filename)).hexdigest()
+                for info in baseline.infolist() if info.filename != 'classes.dex'}
+    with zipfile.ZipFile(output/'java-cli-bootstrap.jar', 'a') as bootstrap:
+        for info in baseline.infolist():
+            if info.filename != 'classes.dex':
+                bootstrap.writestr(info, baseline.read(info.filename))
+with zipfile.ZipFile(output/'java-cli-bootstrap.jar') as bootstrap:
+    assert all(hashlib.sha256(bootstrap.read(name)).hexdigest() == digest
+               for name, digest in retained.items())
 record = {'schema': 'saildroid-api28-java-cli-v1', 'api': 28, 'commands': commands,
           'source_sha256': sha(source/'dalvikvm.cpp'),
           'bootstrap_source_sha256': sha(source/'SdJavaCommand.java'),
           'binary_sha256': sha(output/'dalvikvm'),
-          'bootstrap_jar_sha256': sha(output/'java-cli-bootstrap.jar'), 'flags': flags}
+          'bootstrap_jar_sha256': sha(output/'java-cli-bootstrap.jar'), 'flags': flags,
+          'bootstrap_baseline_sha256': sha(arguments.bootstrap_baseline),
+          'retained_bootstrap_entries': retained}
 (output/'manifest.json').write_text(json.dumps(record, indent=2)+'\n')
 (output/'dalvikvm').chmod(0o755)
 print('API28_JAVA_CLI_BUILT', record['bootstrap_jar_sha256'])
