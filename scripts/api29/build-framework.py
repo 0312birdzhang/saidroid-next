@@ -7,7 +7,9 @@ normal lambda desugaring is required: its LambdaMetafactory is compile-time-only
 """
 from pathlib import Path
 import argparse,zipfile,subprocess,hashlib,json,os,struct
-p=argparse.ArgumentParser();p.add_argument('inputs',type=Path);p.add_argument('core',type=Path);p.add_argument('output',type=Path);p.add_argument('--source',type=Path);p.add_argument('--api',type=int,choices=(28,29),default=29);args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('inputs',type=Path);p.add_argument('core',type=Path);p.add_argument('output',type=Path);p.add_argument('--source',type=Path);p.add_argument('--api',type=int,choices=(28,29),default=29)
+p.add_argument('--platform-dex',type=Path,action='append',default=[],help='Matching standard platform DEX with private paths relocated and standalone core classes excluded')
+args=p.parse_args()
 framework_inputs={28:('android-all-9-robolectric-4913185-2.jar','cf4aed5e458deb48ddc0ca92fc25156e6f478d9d5c1d948cdd1817a67ee11b32'),29:('android-all-10-robolectric-5803371.jar','a0ad701eedd47bdaefbac1c2cc80dd400c0adea3cccd8a3ad286f79da1ca294c')}
 framework_name,framework_hash=framework_inputs[args.api]
 source=args.source or (args.inputs/framework_name);r8=args.inputs/'r8-8.3.37.jar'
@@ -30,7 +32,15 @@ for file in sorted(args.core.glob('*.jar')):
  with zipfile.ZipFile(file)as z:core.update(classes(z.read('classes.dex')))
  core_files[file.name]=hashlib.sha256(file.read_bytes()).hexdigest()
 assert 'Ljava/lang/Object;'in core
-included=[];excluded=[];path_changes=[]
+platform_types=set()
+platform_files={}
+for file in args.platform_dex:
+ data=file.read_bytes()
+ types=classes(data)
+ assert not(types&platform_types or types&core),str(file)
+ platform_types.update(types)
+ platform_files[str(file)]=hashlib.sha256(data).hexdigest()
+included=[];excluded=[];platform_replaced=[];path_changes=[]
 private_root=b'/home/art/api29-root'
 def private_paths(name,data):
  # Keep Android's implementation; relocate only platform-owned file resources.
@@ -54,13 +64,14 @@ with zipfile.ZipFile(source)as incoming,zipfile.ZipFile(args.output/'classes.jar
   if not name.endswith('.class'):continue
   descriptor='L'+name[:-6]+';'
   if descriptor in core:excluded.append(name);continue
+  if descriptor in platform_types:platform_replaced.append(name);continue
   included.append(name);outgoing.writestr(name,private_paths(name,incoming.read(name)))
 print('API'+str(args.api)+'_CLASSES=prepared|included='+str(len(included))+'|core_excluded='+str(len(excluded)),flush=True)
 java=Path(os.environ.get('JAVA_HOME','/tmp/jdkfull/jdk-21.0.13+9'))/'bin/java'
 core_classes=Path(os.environ.get('SAILDROID_CORE_CLASSES','/tmp/art-build/art-standalone/out/host/common/obj/JAVA_LIBRARIES/core-all-hostdex_intermediates/classes'))
 with zipfile.ZipFile(args.output/'core-library.jar','x',zipfile.ZIP_DEFLATED)as library:
  for file in sorted(core_classes.rglob('*.class')):library.write(file,str(file.relative_to(core_classes)))
-command=[str(java),'-Xmx6g','-cp',str(r8),'com.android.tools.r8.D8','--release','--min-api',str(args.api),'--lib',str(args.output/'core-library.jar'),'--output',str(args.output/'multi.jar'),str(args.output/'classes.jar')]
+command=[str(java),'-Xmx6g','-cp',str(r8),'com.android.tools.r8.D8','--release','--min-api',str(args.api),'--lib',str(args.output/'core-library.jar'),'--output',str(args.output/'multi.jar'),str(args.output/'classes.jar'),*[str(file)for file in args.platform_dex]]
 with(args.output/'d8.log').open('xb')as log:subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,check=True)
 written=set();files={};resources={}
 with zipfile.ZipFile(source)as original_archive:
@@ -77,8 +88,8 @@ with zipfile.ZipFile(args.output/'multi.jar')as z:
    if not files:
     for resource,value in resources.items():jar.writestr(resource,value)
   files[name]=dict(sha256=hashlib.sha256(file.read_bytes()).hexdigest(),classes=len(types))
-original_types={'L'+n[:-6]+';'for n in included};assert original_types<=written
+original_types={'L'+n[:-6]+';'for n in included}|platform_types;assert original_types<=written
 synthetics=sorted(written-original_types)
 assert all('$$ExternalSynthetic'in name or '$-CC;'in name or '$$Lambda$'in name for name in synthetics),synthetics[:20]
-record=dict(api=args.api,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),compiler_sha256=hashlib.sha256(r8.read_bytes()).hexdigest(),core=core_files,files=files,included=included,excluded_core=excluded,synthetics=synthetics,private_path_changes=path_changes,resources={name:hashlib.sha256(value).hexdigest()for name,value in resources.items()})
+record=dict(api=args.api,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),compiler_sha256=hashlib.sha256(r8.read_bytes()).hexdigest(),core=core_files,files=files,included=included,excluded_core=excluded,synthetics=synthetics,private_path_changes=path_changes,resources={name:hashlib.sha256(value).hexdigest()for name,value in resources.items()},platform_dex=platform_files,platform_replaced=platform_replaced)
 (args.output/'manifest.json').write_text(json.dumps(record,indent=2)+'\n');print('API'+str(args.api)+'_FRAMEWORK=compiled|classes='+str(len(written))+'|jars='+str(len(files)))

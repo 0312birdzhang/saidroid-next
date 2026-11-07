@@ -18,7 +18,7 @@ extensions = {}
 with zipfile.ZipFile(arguments.api28) as framework, zipfile.ZipFile(arguments.api29) as previous:
     existing = set(framework.namelist())
     for name in sorted(previous.namelist()):
-        if name.startswith('libcore/') and name.endswith('.class') and name not in existing:
+        if name.startswith(('libcore/', 'android/icu/', 'com/android/org/kxml2/')) and name.endswith('.class') and name not in existing:
             extensions[name] = previous.read(name)
     with zipfile.ZipFile(arguments.output, 'x', zipfile.ZIP_DEFLATED) as output:
         for name in framework.namelist():
