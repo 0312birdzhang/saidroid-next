@@ -31,7 +31,7 @@ public final class SdJavaCommand {
         System.load(root+"/lib/libsdbridge.so");
         if(!SdBridge.loadBionicLibrary(root+"/android-libs/libandroid_runtime.so",root+"/android-libs"))
             throw new IllegalStateException("CLI Android native bootstrap failed");
-        if(SdBridge.registerFrameworkNatives()!=(api==28?95:104))
+        if(SdBridge.registerFrameworkNatives()!=(api==28?96:104))
             throw new IllegalStateException("CLI framework native registration differs from its component");
         if(android.os.Build.VERSION.SDK_INT!=api)throw new IllegalStateException("CLI framework API differs from its component");
         if(!SdBridge.installClassLoaderNamespaces())throw new IllegalStateException("CLI native namespace backend unavailable");
