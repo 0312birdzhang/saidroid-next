@@ -109,6 +109,9 @@ public final class SdRuntime {
             Constructor<?> constructor=binding.getDeclaredConstructor();constructor.setAccessible(true);Object data=constructor.newInstance();
             set(data,"appInfo",app);set(data,"info",loaded);set(data,"processName",SdApkPackage.processName());set(data,"compatInfo",CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO);
             set(data,"config",hostConfiguration);
+            // Android 9 copies this binding value into the public Build.SERIAL
+            // field. The component has no device-identifier service.
+            set(data,"buildSerial",android.os.Build.UNKNOWN);
             ArrayList<ProviderInfo> providers=new ArrayList<ProviderInfo>();
             for(android.content.pm.PackageParser.Provider provider:SdApkPackage.parsed().providers){
                 String process=SdApkPackage.providerProcess(provider.info);if(!process.equals(SdApkPackage.processName()))continue;

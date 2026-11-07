@@ -8,6 +8,7 @@ public final class HostApi {
     public static native String audioSnapshot();
     public static native int ringerMode();
     public static native int wifiEnabledState();
+    public static native String wifiConnectionInfo(boolean includeName);
     public static native void openApplication(String packageName);
     public static native void startService(String packageName,String service,String process);
     public static native void startActivityProcess(String packageName,String activity,String process);

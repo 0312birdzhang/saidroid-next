@@ -133,7 +133,11 @@ public final class SdActivityHost {
     }
     private static void verifyLaunch(final ActivityThread thread,final Entry e,final Entry old,final int attempt){
         post(new Runnable(){public void run(){try{
-            e.activity=thread.getActivity(e.token);e.record=ActivityThread.class.getMethod("getActivityClient",IBinder.class).invoke(thread,e.token);
+            if(!stack.contains(e))return;
+            e.record=ActivityThread.class.getMethod("getActivityClient",IBinder.class).invoke(thread,e.token);
+            // Android 9 getActivity() dereferences an absent client record.
+            // Launch and relaunch transactions can still be queued here.
+            e.activity=e.record==null?null:thread.getActivity(e.token);
             if((e.activity==null||e.record==null)&&attempt<80){
                 System.err.println("SDACTIVITY=transaction_pending|class="+e.info.name+"|attempt="+attempt);
                 new Handler(Looper.getMainLooper()).postDelayed(new Runnable(){public void run(){verifyLaunch(thread,e,old,attempt+1);}},25);
