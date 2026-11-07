@@ -86,6 +86,15 @@ public final class SdRuntime {
             Constructor<ActivityThread> threadConstructor=ActivityThread.class.getDeclaredConstructor();threadConstructor.setAccessible(true);
             ActivityThread thread=threadConstructor.newInstance();
             Method attach=ActivityThread.class.getDeclaredMethod("attach",boolean.class,long.class);attach.setAccessible(true);attach.invoke(thread,false,0L);SdStartup.phase("thread_attached");
+            // ActivityThread.main publishes this handler after attach. Framework
+            // callbacks such as background SharedPreferences listener delivery
+            // use it directly, before any Activity needs to be created.
+            Method getHandler=ActivityThread.class.getDeclaredMethod("getHandler");getHandler.setAccessible(true);
+            android.os.Handler mainHandler=(android.os.Handler)getHandler.invoke(thread);
+            if(mainHandler.getLooper()!=Looper.getMainLooper())throw new IllegalStateException("Application handler must use the main Looper");
+            Field sharedHandler=ActivityThread.class.getDeclaredField("sMainThreadHandler");sharedHandler.setAccessible(true);
+            if(sharedHandler.get(null)==null)sharedHandler.set(null,mainHandler);
+            System.err.println("SDRUNTIME=main_thread_handler_ready|looper=main|before_application_bind=true");
             System.err.println("SDRUNTIME=application_thread_attached");
             if(Boolean.getBoolean("saidroid.vmDiagnostics"))System.err.println("VM_CODE_MAPS_START\n"+new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/proc/self/maps")),"UTF-8")+"VM_CODE_MAPS_END");
             Configuration hostConfiguration=SdActivityHost.displayConfiguration();
