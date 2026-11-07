@@ -95,7 +95,8 @@ int sd_art_main(int argc, char **argv) {
   const char *id = getenv("SAILDROID_DESKTOP_ID");
   if (!id || !*id)
     id = title;
-  int width = 1080, height = 2160;
+  // Zero asks the window backend to use the compositor's initial dimensions.
+  int width = 0, height = 0;
   const char *w = getenv("SAILDROID_DISPLAY_WIDTH"),
              *h = getenv("SAILDROID_DISPLAY_HEIGHT");
   if (w)

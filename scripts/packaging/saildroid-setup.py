@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manual Sailfish setup/activation. No services, UI launch, package or app install.
+"""Manual Sailfish activation and private Binder setup. No UI or app install.
 
 Production CLI has no prefix/test override. Tests inject a separate Platform
 implementation and are refused on Sailfish. Every production mutation is local.
@@ -179,8 +179,8 @@ class Platform:
                 parsed = shlex.split(value)
                 if parsed:
                     values[key] = parsed[0]
-        require(values.get('ID') == 'sailfishos' and re.fullmatch(r'5\.2(?:\.[0-9]+)*', values.get('VERSION_ID', '')),
-                'This setup supports Sailfish OS 5.2 only')
+        require(values.get('ID') == 'sailfishos' and re.fullmatch(r'5\.[23](?:\.[0-9]+)*', values.get('VERSION_ID', '')),
+                'This setup supports Sailfish OS 5.2 and 5.3')
         require(platform.machine() == 'aarch64', 'This release requires aarch64')
         for tool in ('rpm', 'getcap'):
             require(shutil.which(tool), 'Required platform tool missing: ' + tool)
@@ -189,6 +189,18 @@ class Platform:
     def run(self, command, **kwargs):
         return subprocess.run(command, capture_output=True, text=True, timeout=120,
                               env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C'}, **kwargs)
+
+    def prepare_binder(self, account, release):
+        helper = release / 'bin/saildroid-binder-setup.py'
+        if not helper.exists():
+            # Older releases can still use an already provisioned private device.
+            require(self.path('/home/art/runtime/binder/binder').exists(),
+                    'This release lacks private Binder provisioning; install an updated release')
+            return
+        trusted(helper, self.prefix)
+        result = self.run([sys.executable, str(helper), '--install-service'])
+        require(result.returncode == 0 and 'SAILDROID_BINDER_READY' in result.stdout,
+                'Private Binder provisioning failed: ' + result.stdout + result.stderr)
 
     def check_package(self, release, release_id):
         name = 'saildroid-runtime-' + release_id
@@ -341,14 +353,16 @@ class Setup:
         os.chown(path, owner, self.account['gid'] if owner else 0)
         return path
 
-    def prepare(self):
+    def prepare(self, binder=True):
         for path in ('/home/art', '/home/art/bin', STATE):
             self.make_directory(path, 0, 0o755 if path != STATE else 0o700)
             trusted(self.host.path(path), self.host.prefix, True)
         trusted(self.state, self.host.prefix, True)
         for path in ('/home/art/apps', '/home/art/data', '/home/art/data/shared', '/home/art/data/logs',
-                     '/home/art/data/manager', '/home/art/data/binder', '/home/art/runtime', '/home/art/runtime/binder'):
+                     '/home/art/data/manager', '/home/art/data/binder', '/home/art/runtime'):
             self.make_directory(path, self.account['uid'], 0o700)
+        if binder:
+            self.make_directory('/home/art/runtime/binder', self.account['uid'], 0o700)
         runtime = '/run/user/' + str(self.account['uid']) + '/saildroid'
         self.make_directory(runtime, self.account['uid'], 0o700)
         self.lock(self.state / 'setup.lock', 0)
@@ -532,9 +546,12 @@ class Setup:
         self.host.check_session(self.account)
         release = self.host.path(RELEASES + '/' + release_id)
         target = self.verify(release)
-        self.prepare()
+        # Provisioning must also be able to finish a previous partial attempt.
+        self.prepare(binder=False)
         self.check_pending()
         self.quiet()
+        self.host.prepare_binder(self.account, release)
+        self.make_directory('/home/art/runtime/binder', self.account['uid'], 0o700)
         old_link = self.read_link()
         old = self.previous(old_link)
         same = bool(old and old['path'] == target['path'])

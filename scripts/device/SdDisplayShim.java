@@ -9,8 +9,33 @@ import java.util.*;
 
 /** API 29 display service for the actual process-owned Wayland output. */
 public final class SdDisplayShim {
-    public static final int WIDTH=1080,HEIGHT=2160,DENSITY=420,DISPLAY_ID=0;
+    public static volatile int WIDTH=dimension("SAILDROID_DISPLAY_WIDTH",1080);
+    public static volatile int HEIGHT=dimension("SAILDROID_DISPLAY_HEIGHT",2160);
+    public static final int DENSITY=420,DISPLAY_ID=0;
     private SdDisplayShim(){}
+    static int dimension(String name, int fallback) {
+        String value = System.getenv(name);
+        if (value == null) return fallback;
+        int pixels = Integer.parseInt(value);
+        if (pixels <= 0) throw new IllegalArgumentException("Invalid display dimension: " + name);
+        return pixels;
+    }
+    public static void configureFromHost() {
+        int width = dimension("SAILDROID_DISPLAY_WIDTH", WIDTH);
+        int height = dimension("SAILDROID_DISPLAY_HEIGHT", HEIGHT);
+        if (width == WIDTH && height == HEIGHT) return;
+        WIDTH = width;
+        HEIGHT = height;
+        local.displayChanged();
+        android.app.ActivityThread thread = android.app.ActivityThread.currentActivityThread();
+        if (thread != null) {
+            try {
+                SdActivityHost.applyDisplayConfiguration(thread);
+            } catch (Exception failure) {
+                throw new IllegalStateException("Display configuration failed", failure);
+            }
+        }
+    }
     public static DisplayInfo makeDisplayInfo(){
         DisplayInfo d=new DisplayInfo();d.name="SailDroid";d.uniqueId="saildroid:wayland";
         d.address=android.view.DisplayAddress.fromPhysicalDisplayId(0);
@@ -26,11 +51,32 @@ public final class SdDisplayShim {
         private final IdentityHashMap<IBinder,IDisplayManagerCallback> callbacks=new IdentityHashMap<IBinder,IDisplayManagerCallback>();
         public LocalDisplayManager(){service=(IDisplayManager)Proxy.newProxyInstance(IDisplayManager.class.getClassLoader(),new Class<?>[]{IDisplayManager.class},this);binder.attachInterface(service,"android.hardware.display.IDisplayManager");}
         public IBinder asBinder(){return binder;}public IDisplayManager service(){return service;}
+        public void displayChanged() {
+            ArrayList<IDisplayManagerCallback> snapshot;
+            synchronized (callbacks) {
+                snapshot = new ArrayList<IDisplayManagerCallback>(callbacks.values());
+            }
+            for (IDisplayManagerCallback callback : snapshot) {
+                try {
+                    callback.onDisplayEvent(DISPLAY_ID, 2);
+                } catch (android.os.RemoteException failure) {
+                    synchronized (callbacks) {
+                        callbacks.remove(callback.asBinder());
+                    }
+                }
+            }
+        }
         @Override public Object invoke(Object proxy,Method method,Object[] a){
             String n=method.getName();if(n.equals("asBinder"))return binder;if(n.equals("toString"))return "SailDroid Wayland display";if(n.equals("hashCode"))return System.identityHashCode(proxy);if(n.equals("equals"))return proxy==a[0];
             if(n.equals("getDisplayInfo"))return (Integer)a[0]==DISPLAY_ID?makeDisplayInfo():null;
             if(n.equals("getDisplayIds"))return new int[]{DISPLAY_ID};
-            if(n.equals("registerCallback")){IDisplayManagerCallback callback=(IDisplayManagerCallback)a[0];callbacks.put(callback.asBinder(),callback);return null;}
+            if (n.equals("registerCallback")) {
+                IDisplayManagerCallback callback = (IDisplayManagerCallback)a[0];
+                synchronized (callbacks) {
+                    callbacks.put(callback.asBinder(), callback);
+                }
+                return null;
+            }
             if(n.equals("getStableDisplaySize"))return new android.graphics.Point(WIDTH,HEIGHT);
             if(n.equals("isUidPresentOnDisplay"))return (Integer)a[0]==android.os.Process.myUid()&&(Integer)a[1]==DISPLAY_ID;
             if(n.equals("getPreferredWideGamutColorSpaceId"))return android.graphics.ColorSpace.Named.SRGB.ordinal();
