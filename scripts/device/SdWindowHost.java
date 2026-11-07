@@ -30,7 +30,7 @@ public final class SdWindowHost {
     public static native void nativeHardwareRelease(long pointer);
     public static synchronized void install(String library) {
         if(installed)return;
-        System.load(library);nativeSelectHardware(hardwareSelected);nativeInstall();if(hardware())nativeHardwareInitialize();installed=true;
+        System.load(library);nativeSelectHardware(hardwareSelected);nativeInstall();if(hardware()){nativeHardwareInitialize();SdCamera.install();SdSurfaceViews.install();}installed=true;
     }
     public static synchronized void start(String title,String appId) {
         if(started)return;
