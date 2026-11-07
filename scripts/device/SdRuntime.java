@@ -110,8 +110,8 @@ public final class SdRuntime {
             SdStartup.phase("mmkv_start");
             if(new java.io.File(app.nativeLibraryDir,"libmmkv.so").isFile()){
                 Class<?> mmkv=Class.forName("com.tencent.mmkv.MMKV",false,loader);
-                Method load=Runtime.class.getMethod("loadLibrary",String.class,ClassLoader.class);
-                load.invoke(Runtime.getRuntime(),"mmkv",mmkv.getClassLoader());
+                Method load=Runtime.class.getDeclaredMethod("loadLibrary0",ClassLoader.class,String.class);load.setAccessible(true);
+                load.invoke(Runtime.getRuntime(),mmkv.getClassLoader(),"mmkv");
             }
             SdStartup.phase("mmkv_ready");
             Class<?> binding=Class.forName("android.app.ActivityThread$AppBindData");
