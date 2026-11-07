@@ -25,7 +25,21 @@ SCHEMA = 'saildroid-binderfs-provision-v1'
 def root_directory(path, mode):
     if path.resolve() != path:
         raise RuntimeError('Linked directory: ' + str(path))
-    path.mkdir(mode=mode, exist_ok=True)
+    try:
+        path.mkdir(mode=mode)
+    except FileExistsError:
+        pass
+    else:
+        # mkdir's mode is filtered by umask. Normalize only a directory that
+        # this invocation created; existing paths still require an exact match.
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            if os.fstat(descriptor).st_uid != 0:
+                raise RuntimeError('Untrusted new directory: ' + str(path))
+            os.fchown(descriptor, 0, 0)
+            os.fchmod(descriptor, mode)
+        finally:
+            os.close(descriptor)
     info = path.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or stat.S_IMODE(info.st_mode) != mode:
         raise RuntimeError('Untrusted directory: ' + str(path))
@@ -49,11 +63,11 @@ def prepare_directories(account):
         else:
             root_directory(path, 0o755)
     for path in (DIRECTORY.parent, DIRECTORY):
-        path.mkdir(mode=0o755, exist_ok=True)
-        info = path.lstat()
-        if info.st_uid == account.pw_uid and stat.S_IMODE(info.st_mode) == 0o700:
-            os.chown(path, 0, 0)
-            os.chmod(path, 0o755)
+        if path.exists():
+            info = path.lstat()
+            if info.st_uid == account.pw_uid and stat.S_IMODE(info.st_mode) == 0o700:
+                os.chown(path, 0, 0)
+                os.chmod(path, 0o755)
         root_directory(path, 0o755)
 
 
