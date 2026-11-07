@@ -22,5 +22,6 @@ for p in sorted(root.rglob('*')):
  elif p.is_dir():assert stat.S_IMODE(p.stat().st_mode)==0o755;directories.append(relative)
  else:
   mode=stat.S_IMODE(p.stat().st_mode);assert p.is_file()and not(mode&0o7022);files[relative]=dict(sha256=sha(p),size=p.stat().st_size,mode=mode)
-manifest=dict(schema='saildroid-activation-manifest-v1',release_id=a.release_id,api=29,files=files,symlinks=links,directories=directories)
+api=json.loads((root/'runtime.json').read_text())['api'];assert api in (28,29)
+manifest=dict(schema='saildroid-activation-manifest-v1',release_id=a.release_id,api=api,files=files,symlinks=links,directories=directories)
 target.write_text(json.dumps(manifest,indent=2)+'\n');target.chmod(0o644);print(json.dumps(dict(path=str(target),sha256=sha(target),files=len(files),symlinks=len(links))))

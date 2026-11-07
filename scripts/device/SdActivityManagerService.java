@@ -296,6 +296,7 @@ public final class SdActivityManagerService implements InvocationHandler {
             if ("equals".equals(name)) return proxy == args[0];
         }
         if ("asBinder".equals(name)) return binder;
+        if (SdActivityTaskManager.handles(name)) return SdActivityTaskManager.dispatch(proxy, method, args);
         if ("setRenderThread".equals(name)) {
             int tid=(Integer)args[0];
             if(tid<=0||!new java.io.File("/proc/self/task/"+tid).isDirectory())

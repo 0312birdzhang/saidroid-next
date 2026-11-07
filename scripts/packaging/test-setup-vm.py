@@ -68,9 +68,9 @@ def fixture():
   finally:
    for sock in sockets:sock.close()
 
-def release(host,name,legacy=False):
+def release(host,name,legacy=False,api=29):
  root=host.path((m.LEGACY_RELEASES if legacy else m.RELEASES)+'/'+name);owned(root)
- files={'runtime.json':json.dumps(dict(api=29,native_host=True)), 'libexec/saildroid-app':'fixture bootstrap', 'libexec/saildroid-host':'fixture host','bin/dalvikvm':'fixture cli','share/manager.apk':'fixture system apk','share/icons/saildroid.svg':'<svg/>',m.REGISTRY_JAR:'fixture registry jar'}
+ files={'runtime.json':json.dumps(dict(api=api,native_host=True)), 'libexec/saildroid-app':'fixture bootstrap', 'libexec/saildroid-host':'fixture host','bin/dalvikvm':'fixture cli','share/manager.apk':'fixture system apk','share/icons/saildroid.svg':'<svg/>',m.REGISTRY_JAR:'fixture registry jar'}
  for rel,data in files.items():
   p=root/rel;owned(p.parent);p.write_text(data);p.chmod(0o755 if rel.startswith(('bin/','libexec/')) else 0o644)
  seal(root,legacy);return root
@@ -87,6 +87,11 @@ def application(host,package='com.example.fixture'):
  return root
 
 q=subprocess.run(['python3',str(module_path),'status'],capture_output=True,text=True);assert q.returncode==1 and 'Sailfish OS 5.2 and 5.3' in q.stderr;record('production-cli-refuses-build-vm')
+with fixture()as host:
+ root=release(host,'api28-a',api=28)
+ action(host,'change','api28-a');assert os.readlink(host.path('/home/art/api29-root'))==str(root)
+ action(host,'rollback');assert not host.path('/home/art/api29-root').is_symlink()
+ record('api28-activate-and-rollback')
 with fixture()as host:
  a=release(host,'api29-a');b=release(host,'api29-b');c=release(host,'api29-c')
  assert action(host,'status')['active_link']is None

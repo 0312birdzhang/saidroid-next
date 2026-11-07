@@ -124,8 +124,20 @@ public final class SdSurfaceStore {
         }
     }
     public static synchronized void attach(Surface surface,long id)throws Exception{
-        Layer layer=layer(id);long old=nativeObject.getLong(surface);if(old==id)return;
-        if(old!=0)release(old);layer.references++;setNativeObject.invoke(surface,id);
+        Layer layer = layer(id);
+        long old = nativeObject.getLong(surface);
+        if (SdWindowHost.hardware()) {
+            long pointer = layer.hardwareSurface;
+            if (pointer == 0) throw new IllegalStateException("HWUI Surface is not allocated");
+            if (old == pointer) return;
+            if (old != 0) SdWindowHost.nativeHardwareRelease(old);
+            setNativeObject.invoke(surface, SdWindowHost.nativeHardwareRetain(pointer));
+            return;
+        }
+        if (old == id) return;
+        if (old != 0) release(old);
+        layer.references++;
+        setNativeObject.invoke(surface, id);
     }
     public static synchronized void attachControl(SurfaceControl control,long id,int width,int height)throws Exception{
         long old=controlObject.getLong(control);if(old!=id){if(old!=0)release(old);retain(id);controlObject.setLong(control,id);}

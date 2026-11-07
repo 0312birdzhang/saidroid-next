@@ -33,7 +33,6 @@ public final class SdServices {
         }
         activityManager.installFrameworkCache();
         register("activity", activityManager.asBinder());
-        register("activity_task", SdActivityTaskManager.binder());
         register("package", SdPackageManagerService.binder());
         register("window", SdWindowManager.binder());
         register("input", SdInputManager.binder());

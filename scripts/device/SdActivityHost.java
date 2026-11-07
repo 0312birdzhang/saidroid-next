@@ -24,9 +24,9 @@ public final class SdActivityHost {
         if(stack.isEmpty()){taskSnapshot=Collections.emptyList();return;}
         Entry base=stack.get(0),top=stack.get(stack.size()-1);
         ActivityManager.RunningTaskInfo task=new ActivityManager.RunningTaskInfo();
-        task.id=task.taskId=1;task.userId=android.os.Process.myUid()/100000;task.displayId=SdDisplayShim.DISPLAY_ID;
-        task.baseIntent=new Intent(base.intent);task.baseActivity=new ComponentName(base.info.packageName,base.info.name);
-        task.topActivity=new ComponentName(top.info.packageName,top.info.name);task.numActivities=stack.size();task.isRunning=true;
+        task.id=1;
+        task.baseActivity=new ComponentName(base.info.packageName,base.info.name);
+        task.topActivity=new ComponentName(top.info.packageName,top.info.name);task.numActivities=stack.size();
         for(Remote remote:remoteActivities)if(remote.ready){task.topActivity=new ComponentName(remote.info.packageName,remote.info.name);task.numActivities++;}
         task.lastActiveTime=android.os.SystemClock.elapsedRealtime();task.configuration.setTo(displayConfiguration());
         taskSnapshot=Collections.singletonList(task);
@@ -119,7 +119,7 @@ public final class SdActivityHost {
         if(previous!=null&&previous.activity!=null)pause(previous);
         SdServices.registerActivity(e.token,info,e.intent,SdDisplayShim.DISPLAY_ID);stack.add(e);refreshTask();
         ClientTransaction transaction=ClientTransaction.obtain(thread.getApplicationThread(),e.token);
-        transaction.addCallback(LaunchActivityItem.obtain(e.intent,++ident,info,displayConfiguration(),new Configuration(),CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,null,null,hostVisible?ActivityManager.PROCESS_STATE_TOP:ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND,null,null,null,null,true,null,new Binder()));
+        transaction.addCallback(LaunchActivityItem.obtain(e.intent,++ident,info,displayConfiguration(),new Configuration(),CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,null,null,hostVisible?ActivityManager.PROCESS_STATE_TOP:ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND,null,null,null,null,true,null));
         transaction.setLifecycleStateRequest(ResumeActivityItem.obtain(true));
         transaction.schedule();
         final Entry old=previous;

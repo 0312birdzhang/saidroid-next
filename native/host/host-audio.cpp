@@ -58,13 +58,24 @@ static void events(JNIEnv*e,jobject,jobject ref){e->CallStaticVoidMethod(audio_c
 static void finalize_events(JNIEnv*,jobject){} // weak-owner polling has no native allocation
 extern "C" JNIEXPORT void JNICALL Java_SdAudio_nativeInstall(JNIEnv*e,jclass c){
  audio_class=(jclass)e->NewGlobalRef(c);
+ jclass version=e->FindClass("android/os/Build$VERSION");
+ if(!version)return;
+ jfieldID sdk=e->GetStaticFieldID(version,"SDK_INT","I");
+ if(!sdk)return;
+ int api=e->GetStaticIntField(version,sdk);
+ e->DeleteLocalRef(version);
+ jclass audio_system=e->FindClass("android/media/AudioSystem");
+ if(!audio_system)return;
+ if(api>=29){
+  JNINativeMethod channels[]={{(char*)"native_get_FCC_8",(char*)"()I",(void*)fcc}};
+  if(e->RegisterNatives(audio_system,channels,1)<0)return;
+ }
  JNINativeMethod system[]={
-  {(char*)"native_get_FCC_8",(char*)"()I",(void*)fcc},
   {(char*)"listAudioPorts",(char*)"(Ljava/util/ArrayList;[I)I",(void*)ports},
   {(char*)"listAudioPatches",(char*)"(Ljava/util/ArrayList;[I)I",(void*)patches},
   {(char*)"isStreamActive",(char*)"(II)Z",(void*)stream},
   {(char*)"isMicrophoneMuted",(char*)"()Z",(void*)mic}};
- if(e->RegisterNatives(e->FindClass("android/media/AudioSystem"),system,sizeof(system)/sizeof(system[0]))<0)return;
+ if(e->RegisterNatives(audio_system,system,sizeof(system)/sizeof(system[0]))<0)return;
  JNINativeMethod handler[]={{(char*)"native_setup",(char*)"(Ljava/lang/Object;)V",(void*)events},{(char*)"native_finalize",(char*)"()V",(void*)finalize_events}};
  e->RegisterNatives(e->FindClass("android/media/AudioPortEventHandler"),handler,2);
 }

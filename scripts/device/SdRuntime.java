@@ -41,7 +41,9 @@ public final class SdRuntime {
         }
         if(Boolean.getBoolean("saidroid.vmExitDiagnostics")){SdBridge.installExitDiagnostics();SdRuntimeDiagnostics.captureUncaught();}
         if(android.graphics.Typeface.DEFAULT==null)throw new IllegalStateException("Android system font map unavailable");
-        if(android.os.Build.VERSION.SDK_INT!=29)throw new IllegalStateException("SailDroid requires its actual API 29 framework");
+        if(android.os.Build.VERSION.SDK_INT!=28)throw new IllegalStateException("SailDroid requires its actual API 28 framework");
+        System.err.println("SDRUNTIME=platform|sdk="+android.os.Build.VERSION.SDK_INT
+            +"|release="+android.os.Build.VERSION.RELEASE);
 
         // Public hardware fields share the immutable component property source.
         // Capture the framework values before any application code is loaded.
@@ -69,7 +71,7 @@ public final class SdRuntime {
             if((SdApkPackage.applicationInfo().flags&ApplicationInfo.FLAG_HARDWARE_ACCELERATED)==0)
                 SdWindowHost.appOptedOutOfHardware();
             if(SdWindowHost.hardware()){
-                android.graphics.HardwareRenderer.setIsolatedProcess(true);
+                android.view.ThreadedRenderer.setIsolatedProcess(true);
                 System.err.println("SDHWUI=enabled|pipeline=android-hwui-gles-wayland|cpu_readback=0");
             }else android.view.ThreadedRenderer.disable(true);
             SdStartup.phase("apk_metadata_ready");

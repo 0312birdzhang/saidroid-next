@@ -101,8 +101,8 @@ static fs::path own_root() {
   auto root = fs::canonical("/proc/self/exe").parent_path().parent_path();
   trusted(root);
   trusted(root / "runtime.json");
-  if (read_json(root / "runtime.json").at("api") != 29)
-    throw std::runtime_error("API29 required");
+  if (read_json(root / "runtime.json").at("api") != 28)
+    throw std::runtime_error("API28 required");
   return root;
 }
 static void permissions() {

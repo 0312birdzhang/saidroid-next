@@ -58,6 +58,8 @@ if '-' in a.version or '-' in a.rpm_release:
 if a.output.exists():
     raise ValueError('Output already exists')
 root = a.root.resolve()
+api = json.loads((root / 'runtime.json').read_text())['api']
+assert api in (28, 29), 'Unsupported Android API'
 assert digest(a.manifest) == a.manifest_sha256, 'Snapshot manifest hash mismatch'
 expected = json.loads(a.manifest.read_text())
 assert inventory(root) == expected, 'Payload differs from exact manifest'
@@ -116,7 +118,7 @@ lines = [
     '%global __os_install_post %{nil}', '%global debug_package %{nil}',
     '%global _build_id_links none', '%global _binary_payload w9.gzdio',
     'Name: ' + name, 'Version: ' + a.version, 'Release: ' + a.rpm_release,
-    'Summary: Isolated SailDroid API29 development runtime',
+    'Summary: Isolated SailDroid API' + str(api) + ' development runtime',
     'License: Multiple; see bundled source provenance',
     'BuildArch: aarch64', 'AutoReqProv: no',
     *['Requires: ' + r for r in sorted(requirements)],
