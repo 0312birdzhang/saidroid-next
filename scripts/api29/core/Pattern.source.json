@@ -1,0 +1,10 @@
+{
+  "base": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/regex/Pattern.java",
+  "base_sha256": "dd31385caea02408e47ee5837ac82b26bc4a4073309bde1de6b98cfdea6edf61",
+  "matching_platform": {
+    "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/regex/Pattern.java?format=TEXT",
+    "sha256": "ae9807f22953efbedb017527ee182d5bcbbe60bf49cc3720831f633b23c8a761"
+  },
+  "sha256": "0e9ec48af496ec621e42b16554bf118857ca56b5278ab2d5cef2ec6d1c5bb707",
+  "adaptation": "Retain existing native compiler; exact Android10 zero-width leading split and real target SDK compatibility boundary"
+}

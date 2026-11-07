@@ -1,0 +1,22 @@
+{
+  "files": {
+    "java/util/Arrays.java": {
+      "scope": "Only exact Android10 deepEquals0 helper replaces the old component-type shortcut; preserves all existing declarations, no native changes",
+      "source": "java/util/Arrays.java",
+      "sha256": "c282f1fcee4ed5da88a21167470f6155049b7ff7eeac6d76aeeaf307f5ab51c7",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/Arrays.java",
+      "baseline_sha256": "288f7c7f578c39b9a30ef8b220ccb4e0c92ec7691fa5adea5a87aab379df0cb8",
+      "upstream_source": "build/evidence/cts-frame-repair-20261031/aosp-extra/Arrays-api29.java",
+      "upstream_sha256": "4def8ff589eaff7a38878af25979ea41f964908b5098e62e8cb4dd338602f142",
+      "upstream_method_sha256": "1a3946b6f3ba96fe5b5044424a233624bea21c4211b792714b4045764b30d054"
+    },
+    "java/util/Objects.java": {
+      "scope": "Preserve the specified null exception message through D8 by selecting the real String constructor explicitly; native throw-null diagnostics unchanged",
+      "source": "java/util/Objects.java",
+      "sha256": "854fe6956dd13ab3c1a52d1a13e6b9edd9af889bb72896f37c4fe31edc0b23a5",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/Objects.java",
+      "baseline_sha256": "cf2ec1ef20ab7e3a4a6e6d41e72482cd6ea49ead694fd2cdee7921a34a287171",
+      "implementation_change": "No-arg NullPointerException constructor to String-null constructor only in requireNonNull(T); all declarations retained"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+--- baseline/scripts/device/SdAudio.java
++++ r305/scripts/device/SdAudio.java
+@@ -92,6 +92,14 @@
+         if(name.equals("getRingerModeExternal")||name.equals("getRingerModeInternal"))return org.saildroid.host.HostApi.ringerMode();
+         if(name.equals("isMicrophoneMuted"))return microphoneMuted();
+         if(name.equals("isBluetoothScoOn"))return bluetoothScoOn();
++        if(name.equals("abandonAudioFocus")){
++            if(args==null||args.length!=4||!SdApkPackage.NAME.equals(args[3]))throw new SecurityException("Audio focus caller differs from application");
++            // This backend cannot grant Android focus requests, so there is
++            // no accepted Android owner to remove. Match Android's successful
++            // abandon of an absent client; do not acquire/change host focus.
++            System.err.println("SDAUDIO=focus_abandon|owners=0|host_focus=unchanged|result=1");
++            return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
++        }
+         throw SdRuntimeDiagnostics.unsupported("Host audio service",method);
+     }
+ }

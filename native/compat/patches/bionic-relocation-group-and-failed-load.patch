@@ -1,0 +1,87 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -606,22 +606,13 @@
+ 			goto done;
+ 	}
+ 
+-	for (ElfW(Dyn) *d = si->dynamic; d->d_tag != DT_NULL; d++) {
+-		if (d->d_tag == DT_NEEDED) {
+-			lsi = (soinfo *)d->d_un.d_val;
+-			if (!apkenv_validate_soinfo(lsi)) {
+-				DL_ERR("%5d bad DT_NEEDED pointer in %s",
+-				       apkenv_pid, si->name);
+-				return NULL;
+-			}
+-
+-			DEBUG("%5d %s: looking up %s in %s\n",
+-			      apkenv_pid, si->name, name, lsi->name);
+-			s = apkenv__elf_lookup(lsi, &symbol_name);
+-			if ((s != NULL) && (s->st_shndx != SHN_UNDEF))
+-				goto done;
+-		}
+-	}
++	/* Relocations use the complete DT_NEEDED local group, breadth first,
++	 * just like handle-based dlsym. A direct dependency may export an ABI
++	 * from one of its own dependencies (e.g. RSDriver -> RSCpuRef). */
++	lsi = si;
++	s = apkenv_lookup_in_library(&lsi, name);
++	if (s != NULL)
++		goto done;
+ 
+ #if ALLOW_SYMBOLS_FROM_MAIN
+ 	/* If we are resolving relocations while dlopen()ing a library, it's OK for
+@@ -1560,6 +1551,9 @@
+ 		** if no additional libraries have moved it since we updated it.
+ 		*/
+ 		munmap((void *)si->base, si->size);
++		/* Failed objects must leave the lookup list before their dynamic
++		 * strings become unmapped. This also permits a corrected retry. */
++		apkenv_free_info(si);
+ 		return NULL;
+ 	}
+ 
+@@ -2471,6 +2465,9 @@
+ 
+ static void apkenv_call_destructors(soinfo *si)
+ {
++	/* A failed parent can release a dependency before initialization. */
++	if (!si->constructors_called)
++		return;
+ 	if (si->fini_array) {
+ 		TRACE("[ %5d Calling fini_array @ 0x%016lx [%lu] for '%s' ]\n", apkenv_pid,
+ 		      (intptr_t)si->fini_array, si->fini_array_count, si->name);
+@@ -2639,6 +2636,7 @@
+ {
+ 	ElfW(Phdr) *phdr = si->phdr;
+ 	int phnum = si->phnum;
++	size_t resolved_needed = 0;
+ 
+ 	void *tls_init = NULL;
+ 	size_t tls_init_size = 0;
+@@ -2904,6 +2902,7 @@
+ 			*/
+ 			d->d_un.d_val = (intptr_t)lsi;
+ 			lsi->refcount++;
++			resolved_needed++;
+ 		}
+ 	}
+ 
+@@ -3003,6 +3002,18 @@
+ 
+ fail:
+ 	ERROR("failed to link %s\n", si->name);
++	/* Roll back only references acquired by this incomplete load. The
++	 * failed object's constructors and destructors have never run. */
++	if (resolved_needed) {
++		for (ElfW(Dyn) *d = si->dynamic; d->d_tag != DT_NULL && resolved_needed; d++) {
++			if (d->d_tag == DT_NEEDED) {
++				soinfo *dependency = (soinfo *)d->d_un.d_val;
++				resolved_needed--;
++				if (apkenv_validate_soinfo(dependency))
++					apkenv_unload_library(dependency);
++			}
++		}
++	}
+ 	si->flags |= FLAG_ERROR;
+ 	return -1;
+ }

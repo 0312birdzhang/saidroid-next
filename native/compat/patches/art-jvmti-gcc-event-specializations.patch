@@ -1,0 +1,46 @@
+--- a/art/openjdkjvmti/events-inl.h
++++ b/art/openjdkjvmti/events-inl.h
+@@ -469,14 +469,14 @@
+ }
+ 
+ template <>
+-inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassLoad>(art::Thread* thread,
++inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassLoad, jthread, jclass>(art::Thread* thread,
+                                                                    JNIEnv* jnienv,
+                                                                    jthread jni_thread,
+                                                                    jclass klass) const {
+   DispatchClassLoadOrPrepareEvent<ArtJvmtiEvent::kClassLoad>(thread, jnienv, jni_thread, klass);
+ }
+ template <>
+-inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassPrepare>(art::Thread* thread,
++inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassPrepare, jthread, jclass>(art::Thread* thread,
+                                                                       JNIEnv* jnienv,
+                                                                       jthread jni_thread,
+                                                                       jclass klass) const {
+@@ -486,7 +486,7 @@
+ // Need to give a custom specialization for NativeMethodBind since it has to deal with an out
+ // variable.
+ template <>
+-inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kNativeMethodBind>(art::Thread* thread,
++inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kNativeMethodBind, jthread, jmethodID, void*, void**>(art::Thread* thread,
+                                                                           JNIEnv* jnienv,
+                                                                           jthread jni_thread,
+                                                                           jmethodID method,
+@@ -520,7 +520,7 @@
+ // ClassFileLoadHook event types is the same, and in the DispatchClassFileLoadHookEvent helper.
+ // The following two DispatchEvent specializations dispatch to it.
+ template <>
+-inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassFileLoadHookRetransformable>(
++inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassFileLoadHookRetransformable, jclass, jobject, const char*, jobject, jint, const unsigned char*, jint*, unsigned char**>(
+     art::Thread* thread,
+     JNIEnv* jnienv,
+     jclass class_being_redefined,
+@@ -545,7 +545,7 @@
+ }
+ 
+ template <>
+-inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassFileLoadHookNonRetransformable>(
++inline void EventHandler::DispatchEvent<ArtJvmtiEvent::kClassFileLoadHookNonRetransformable, jclass, jobject, const char*, jobject, jint, const unsigned char*, jint*, unsigned char**>(
+     art::Thread* thread,
+     JNIEnv* jnienv,
+     jclass class_being_redefined,

@@ -1,0 +1,37 @@
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -128,6 +128,10 @@
+ 
+ void *bionic_dlsym(void *handle, const char *symbol)
+ {
++    int (*hardware_symbol)(void *,const char *,void **)=dlsym(RTLD_DEFAULT,"sd_hardware_symbol");
++    void *hardware_result=NULL;
++    if(hardware_symbol&&hardware_symbol(handle,symbol,&hardware_result))return hardware_result;
++
+ 	verbose("bionic_dlsym(%p, %s) called\n", handle, symbol);
+ 
+ 	soinfo *found;
+@@ -241,14 +245,21 @@
+ 	pthread_mutex_unlock(&apkenv_dl_lock);
+ 
+ 	/* don't use else because this shouldn't be inside the critical zone */
+-	if (!si)
+-		return dladdr(addr, info);
++	if (!si) {
++        int (*hardware_address)(const void *,Dl_info *)=dlsym(RTLD_DEFAULT,"sd_hardware_address");
++        if(hardware_address&&hardware_address(addr,info))return 1;
++        return dladdr(addr,info);
++    }
+ 
+ 	return ret;
+ }
+ 
+ int bionic_dlclose(void *handle)
+ {
++    int (*hardware_close)(void *,int *)=dlsym(RTLD_DEFAULT,"sd_hardware_close");
++    int hardware_result;
++    if(hardware_close&&hardware_close(handle,&hardware_result))return hardware_result;
++
+ 	if (!do_we_have_this_handle(handle))
+ 		return dlclose(handle);
+ 

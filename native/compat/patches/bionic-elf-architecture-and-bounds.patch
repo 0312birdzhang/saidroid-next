@@ -1,0 +1,185 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -813,8 +813,13 @@
+ #define SOPATH_MAX 8
+ 
+ static const char *apkenv_sopaths[SOPATH_MAX + 1] = {
++#if __SIZEOF_POINTER__ == 8
++	"/vendor/lib64",
++	"/system/lib64",
++#else
+ 	"/vendor/lib",
+ 	"/system/lib",
++#endif
+ 	/* APKENV_PREFIX "/lib/" APKENV_TARGET "/bionic/", */
+ #ifdef APKENV_LOCAL_BIONIC_PATH
+ 	APKENV_LOCAL_BIONIC_PATH,
+@@ -986,25 +991,60 @@
+  *      -1 if no valid ELF object is found @ base.
+  */
+ static int
+-apkenv_verify_elf_object(void *base, const char *name)
+-{
+-	ElfW(Ehdr) *hdr = (ElfW(Ehdr) *)base;
+-
+-	if (hdr->e_ident[EI_MAG0] != ELFMAG0)
++apkenv_verify_elf_object(void *base, size_t length, const char *name)
++{
++	if (length < sizeof(ElfW(Ehdr))) {
++		DL_ERR("Truncated ELF header in %s", name);
+ 		return -1;
+-	if (hdr->e_ident[EI_MAG1] != ELFMAG1)
++	}
++	ElfW(Ehdr) *hdr = base;
++#if __SIZEOF_POINTER__ == 8
++	const unsigned expected_class = ELFCLASS64;
++#else
++	const unsigned expected_class = ELFCLASS32;
++#endif
++#if defined(__aarch64__)
++	const unsigned expected_machine = EM_AARCH64;
++#elif defined(__arm__)
++	const unsigned expected_machine = EM_ARM;
++#elif defined(__x86_64__)
++	const unsigned expected_machine = EM_X86_64;
++#elif defined(__i386__)
++	const unsigned expected_machine = EM_386;
++#else
++#error Unsupported native ELF machine
++#endif
++	if (strncmp((const char *)hdr->e_ident, ELFMAG, SELFMAG) ||
++	    hdr->e_ident[EI_CLASS] != expected_class ||
++	    hdr->e_ident[EI_DATA] != ELFDATA2LSB ||
++	    hdr->e_ident[EI_VERSION] != EV_CURRENT ||
++	    hdr->e_machine != expected_machine || hdr->e_version != EV_CURRENT ||
++	    hdr->e_type != ET_DYN || hdr->e_ehsize != sizeof(*hdr)) {
++		DL_ERR("Incompatible ELF architecture or header in %s", name);
+ 		return -1;
+-	if (hdr->e_ident[EI_MAG2] != ELFMAG2)
++	}
++	/* Validate before computing a pointer from an untrusted file offset.
++	 * load_segments currently has a bounded 64-entry program-header copy. */
++	if (!hdr->e_phnum || hdr->e_phnum > 64 ||
++	    hdr->e_phentsize != sizeof(ElfW(Phdr)) ||
++	    hdr->e_phoff < sizeof(*hdr) || hdr->e_phoff > length ||
++	    hdr->e_phnum > (length - hdr->e_phoff) / sizeof(ElfW(Phdr))) {
++		DL_ERR("Invalid ELF program-header bounds in %s", name);
+ 		return -1;
+-	if (hdr->e_ident[EI_MAG3] != ELFMAG3)
+-		return -1;
+-
+-	/* TODO: make this proper for aarch64 / x86_64 */
+-	/*#ifdef ANDROID_ARM_LINKER
+-	    if (hdr->e_machine != EM_ARM) return -1;
+-	#elif defined(ANDROID_X86_LINKER)
+-	    if (hdr->e_machine != EM_386) return -1;
+-	#endif*/
++	}
++	ElfW(Phdr) *phdr = (ElfW(Phdr) *)((unsigned char *)base + hdr->e_phoff);
++	for (unsigned i = 0; i < hdr->e_phnum; i++) {
++		if (phdr[i].p_type != PT_LOAD) continue;
++		if (phdr[i].p_offset > length ||
++		    phdr[i].p_filesz > length - phdr[i].p_offset ||
++		    phdr[i].p_filesz > phdr[i].p_memsz ||
++		    phdr[i].p_memsz > (ElfW(Addr))-1 - phdr[i].p_vaddr ||
++		    phdr[i].p_vaddr + phdr[i].p_memsz > (ElfW(Addr))-1 - PAGE_SIZE ||
++		    (phdr[i].p_offset & PAGE_MASK) != (phdr[i].p_vaddr & PAGE_MASK)) {
++			DL_ERR("Invalid ELF load-segment bounds in %s", name);
++			return -1;
++		}
++	}
+ 	return 0;
+ }
+ 
+@@ -1030,7 +1070,7 @@
+  *         This indicates a pre-linked library.
+  */
+ static intptr_t
+-apkenv_get_lib_extents(int fd, const char *name, void *__hdr, size_t *total_sz)
++apkenv_get_lib_extents(int fd, const char *name, void *__hdr, size_t length, size_t *total_sz)
+ {
+ 	intptr_t req_base;
+ 	intptr_t min_vaddr = 0xffffffff;
+@@ -1041,7 +1081,7 @@
+ 	int cnt;
+ 
+ 	TRACE("[ %5d Computing extents for '%s'. ]\n", apkenv_pid, name);
+-	if (apkenv_verify_elf_object(_hdr, name) < 0) {
++	if (apkenv_verify_elf_object(_hdr, length, name) < 0) {
+ 		DL_ERR("%5d - %s is not a valid ELF object", apkenv_pid, name);
+ 		return (intptr_t)-1;
+ 	}
+@@ -1180,7 +1220,7 @@
+ {
+ 	/* 修复：库段会用 MAP_FIXED 映射到可能覆盖调用方堆缓冲区的地址范围，
+ 	 * 头与 phdr 必须先复制到栈上，否则映射完成后解析全成垃圾。 */
+-	static ElfW(Phdr) phdr_copy[64];
++	ElfW(Phdr) phdr_copy[64];
+ 	ElfW(Ehdr) ehdr_copy = *(ElfW(Ehdr) *)header;
+ 	{
+ 		ElfW(Phdr) *src = (ElfW(Phdr) *)((unsigned char *)header + ehdr_copy.e_phoff);
+@@ -1417,7 +1457,7 @@
+ {
+ 	char fullpath[512];
+ 	int fd = apkenv_open_library(name, fullpath);
+-	int cnt;
++	uint8_t *bytes = NULL;
+ 	size_t ext_sz;
+ 	size_t req_base;
+ 	const char *bname;
+@@ -1446,13 +1486,13 @@
+ 	}
+ 
+ 	off_t end;
+-	if ((end = lseek(fd, 0, SEEK_END)) < 0) {
++	if ((end = lseek(fd, 0, SEEK_END)) < (off_t)sizeof(ElfW(Ehdr)) ||
++	    (uintmax_t)end > SIZE_MAX) {
+ 		DL_ERR("lseek() failed!");
+ 		goto fail;
+ 	}
+ 
+-	uint8_t *bytes;
+-	if (!(bytes = calloc(1, end))) {
++	if (!(bytes = calloc(1, (size_t)end))) {
+ 		DL_ERR("calloc() failed!");
+ 		goto fail;
+ 	}
+@@ -1464,14 +1504,19 @@
+ 		goto fail;
+ 	}
+ 
+-	if ((cnt = read(fd, bytes, end)) < 0) {
+-		DL_ERR("read() failed!");
+-		goto fail;
++	for (size_t received = 0; received < (size_t)end;) {
++		ssize_t count = read(fd, bytes + received, (size_t)end - received);
++		if (count < 0 && errno == EINTR) continue;
++		if (count <= 0) {
++			DL_ERR("Incomplete ELF read for %s", name);
++			goto fail;
++		}
++		received += (size_t)count;
+ 	}
+ 
+ 	/* Parse the ELF header and get the size of the memory footprint for
+ 	 * the library */
+-	req_base = apkenv_get_lib_extents(fd, name, bytes, &ext_sz);
++	req_base = apkenv_get_lib_extents(fd, name, bytes, (size_t)end, &ext_sz);
+ 	if (req_base == (intptr_t)-1)
+ 		goto fail;
+ 	TRACE("[ %5d - '%s' (%s) wants base=0x%016lx sz=0x%016lx ]\n", apkenv_pid, name,
+@@ -1530,12 +1575,14 @@
+ 	}
+ 	/**/
+ 
++	free(bytes);
+ 	close(fd);
+ 	return si;
+ 
+ fail:
+ 	if (si)
+ 		apkenv_free_info(si);
++	free(bytes);
+ 	close(fd);
+ 	return NULL;
+ }

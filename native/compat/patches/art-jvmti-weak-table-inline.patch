@@ -1,0 +1,10 @@
+--- a/art/openjdkjvmti/OpenjdkJvmTi.cc
++++ b/art/openjdkjvmti/OpenjdkJvmTi.cc
+@@ -45,6 +45,7 @@
+ #include "base/mutex.h"
+ #include "events-inl.h"
+ #include "jni/jni_env_ext-inl.h"
++#include "jvmti_weak_table-inl.h"
+ #include "obj_ptr-inl.h"
+ #include "object_tagging.h"
+ #include "runtime.h"

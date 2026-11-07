@@ -1,0 +1,11 @@
+{
+  "scope": "Two original API29 declarations initialized by matching actual native constants; no old Java/native signature changes",
+  "source": "android/system/OsConstants.java",
+  "sha256": "abf62c698a59352cb99706f76e0d247c1eb10ac2ce5d187e9d7cd31a9712db36",
+  "baseline_source": "third_party/art-standalone/libcore/luni/src/main/java/android/system/OsConstants.java",
+  "baseline_sha256": "4bdad7ab54f9675d090095dc68d042ccd4a2771c34ba41f9734468997f2a0cee",
+  "upstream": {
+    "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/luni/src/main/java/android/system/OsConstants.java?format=TEXT",
+    "sha256": "21266352386a3745ef47e532501072af21221959c0b6253360290d220bf2c41a"
+  }
+}

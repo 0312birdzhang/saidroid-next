@@ -1,0 +1,14 @@
+{
+  "scope": "Restore canonical Android10 deprecated BCPBEKey-without-IV behavior only for initialized target SDK1..29. Copy actual Android10 warning/zero-IV paths; target0 or>29 remains strict. Other algorithms, provided/random IVs, key derivation, trust, provider inventory and original tests unchanged. Private candidate only, not daily default.",
+  "files": {
+    "com/android/org/bouncycastle/jcajce/provider/symmetric/util/BaseBlockCipher.java": {
+      "sha256": "3cb3e44dcce51b12f8ce9e1eedd2290340a8744e1de4bee16622b6d6245b3fe2",
+      "baseline_source": "third_party/art-standalone/external/bouncycastle/bcprov/src/main/java/org/bouncycastle/jcajce/provider/symmetric/util/BaseBlockCipher.java",
+      "baseline_sha256": "79451f9b6c972fdf63c0d28ece2269ad643fc156999b25aa6c2b9ab86e729be7",
+      "relocated_baseline_sha256": "16a0d433817acdfdb6adf7d45a1e940737b4354ddb3b4776057b1794901ab515",
+      "reference": "build/evidence/cts-frame-repair-20261031/aosp-extra/pbe274-canonical10-v1/BaseBlockCipher.java",
+      "reference_sha256": "30ad2b472de43b3fba399b0e0660b1d6768f3957e4d355cb03f1f667c0bb2c0c",
+      "patch_sha256": "25181452ef74a78f1ed27081e747877934b5acec04e4e6f9e0cc8a39f3907f6c"
+    }
+  }
+}

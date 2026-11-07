@@ -1,0 +1,16 @@
+--- scripts/device/SdNotificationPolicy.java
++++ scripts/device/SdNotificationPolicy.java
+@@ -39,6 +39,13 @@
+         if(name.equals("getPrivateNotificationsAllowed"))return false; // No Android notification content can be displayed by this backend.
+         if(name.equals("getActiveNotifications")){own(args[0]);return new StatusBarNotification[0];}
+         if(name.equals("getAppActiveNotifications")){own(args[0]);user(args[1]);return new ParceledListSlice<StatusBarNotification>(Collections.<StatusBarNotification>emptyList());}
++        if(name.equals("enqueueNotificationWithTag")){
++            own(args[0]);own(args[1]);user(args[5]);
++            if(!(args[4] instanceof Notification))throw new IllegalArgumentException("Notification required");
++            // The same policy already reports notifications disabled and an
++            // empty active list. Disabled posts do not reach any host notifier.
++            System.err.println("SDNOTIFICATION=delivery_blocked|reason=host-policy-disabled|posted=false");return null;
++        }
+         if(name.equals("cancelNotificationWithTag")||name.equals("cancelAllNotifications")){own(args[0]);return null;/* No posted notifications exist. */}
+         if(name.equals("createNotificationChannels")||name.equals("createNotificationChannelGroups")||name.equals("getNotificationChannel")||name.equals("getNotificationChannelForPackage")||name.equals("getNotificationChannels")||name.equals("getNotificationChannelGroups")||name.equals("getNotificationChannelGroup")||name.equals("deleteNotificationChannel")||name.equals("deleteNotificationChannelGroup")){
+             own(args[0]);File lockFile=new File(root(),"metadata.lock");

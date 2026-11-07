@@ -1,0 +1,15 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -294,6 +294,12 @@
+ 
+ static void apkenv_notify_gdb_of_unload(soinfo *info)
+ {
++	/* The glibc-hosted loader intentionally skips debug-map insertion in
++	 * apkenv_notify_gdb_of_load(). There is no matching debugger entry to
++	 * remove; _r_debug_ptr may be NULL. This skips only the notification,
++	 * not destructors, dependency refcounts, segment unmapping or freeing. */
++	(void)info;
++	return;
+ 	if (info->flags & FLAG_EXE) {
+ 		// GDB already knows about the main executable
+ 		return;

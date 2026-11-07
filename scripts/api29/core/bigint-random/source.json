@@ -1,0 +1,10 @@
+{
+  "source": "java/math/BigInteger.java",
+  "sha256": "e5040c20f19ed9f300bc6ef556a59a345920aa71ab257a9ba32af71c0251ddb4",
+  "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/math/BigInteger.java",
+  "baseline_sha256": "9dd0ee92984fa8e9dd280e23db027e85f2e6d1a9e13c3745d6bce90164c63ae8",
+  "upstream_source": "build/evidence/cts-frame-repair-20261031/aosp-extra/BigInteger-api29.java",
+  "upstream_sha256": "5c62fca4da8c65240b513359b395fc3299b01f3c990dc36ef85e92519458705a",
+  "scope": "Preserve Android10 signed word-count overflow rejection before allocation/randomness; normal byte representation, arithmetic, native ABI and random generation unchanged",
+  "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/luni/src/main/java/java/math/BigInteger.java?format=TEXT"
+}

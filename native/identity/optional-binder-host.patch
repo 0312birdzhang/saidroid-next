@@ -1,0 +1,16 @@
+--- a/host-entry.cpp
++++ b/host-entry.cpp
+@@ -43,7 +43,12 @@
+     return 0;
+   try {
+     state("window-ready");
+-    if (instance != "org.saildroid.binder") {
++    // Components without a configured Binder driver use application-local
++    // services. They cannot launch a broker that requires a native IPC driver.
++    const char *root = getenv("ANDROID_ROOT");
++    bool private_binder = root && read_json(fs::path(root) / "runtime.json")
++                                      .value("binder_device", Json()).is_string();
++    if (instance != "org.saildroid.binder" && private_binder) {
+       auto v = call(bus, "EnsureBroker", nullptr);
+       g_variant_unref(v);
+       bool ready = false;

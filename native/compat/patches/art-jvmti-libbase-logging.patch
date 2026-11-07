@@ -1,0 +1,24 @@
+--- a/art/openjdkjvmti/ti_logging.h
++++ b/art/openjdkjvmti/ti_logging.h
+@@ -52,7 +52,7 @@
+                                   __LINE__,                  \
+                                   ::android::base::DEFAULT,  \
+                                   SEVERITY_LAMBDA(severity), \
+-                                  _LOG_TAG_INTERNAL,         \
++                                  nullptr,         \
+                                   -1)
+ 
+ class JvmtiLogMessage {
+@@ -62,10 +62,10 @@
+                   unsigned int line,
+                   android::base::LogId id,
+                   android::base::LogSeverity severity,
+-                  const char* tag,
++                  const char* tag ATTRIBUTE_UNUSED,
+                   int error)
+       : env_(ArtJvmTiEnv::AsArtJvmTiEnv(env)),
+-        real_log_(file, line, id, severity, tag, error),
++        real_log_(file, line, id, severity, error),
+         real_log_stream_(real_log_.stream()) {
+     DCHECK(env_ != nullptr);
+   }

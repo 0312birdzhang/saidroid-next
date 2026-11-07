@@ -1,0 +1,19 @@
+{
+  "scope": "r301 application-owned process-lifetime PendingIntent implementation; candidate not yet tested or promoted",
+  "evidence_root": "build/evidence/qq-pending-intent301-20261102-v1",
+  "files": {
+    "sources.json": "6ab9b4546c01a73804790810a25c222299d0822f0c440a654726fd5ece9ed756",
+    "recipes/probe-fixture-phone.py": "db4946facf7e7be9c633961dea42eb7b41ce109ae8e4b1c693fdc13bfe378c59",
+    "recipes/encode-runtime-vm.py": "c3af2c970fcb9fa2814705fadc5ef93502912c3c691039270696e64db7dbb5a5",
+    "recipes/build-runtime-vm.py": "cd695776b3b6c282a09e6e80b0e8a32ba1214ea19e3a7d38d390fd003150240f",
+    "recipes/package-vm.py": "8df4060bdf5542acefe19f0d57d1ff654fc0716c7c650807979ca50bd79cb691",
+    "recipes/build-fixtures-vm.py": "d5c0208f31bcefd600a0d151c308fee4bcf580572297560725f5b27fb52f4fdf",
+    "test-source/org/example/saildroid/pending/PendingActivity.java": "291772c6a0fa0d28a41b0419db312282b939045cccceb0a375689998afb7bcbc",
+    "source/scripts/device/SdNotificationPolicy.java": "27b9c1415af7f9aa822b7d1e9c6eae0563a6f9a1ef6a23e87f7dba2b4dadbe1e",
+    "source/scripts/device/SdPendingIntents.java": "e56c81c6ead9bdb4b6db8b9c5b9da11a4df61e730d22e628e20ab73398543044",
+    "source/scripts/device/SdActivityManagerService.java": "5f3285815621fb0c580359c28c9008e29d625f564d0239571c0eb934353e735b",
+    "patches/scripts/device/SdNotificationPolicy.java.patch": "39bb366182af149dc45be04d66508eeb143f03526c921626608d19fb3f0d00bf",
+    "patches/scripts/device/SdPendingIntents.java.patch": "61175b958879730cc7b842e058455700a7c73ab5d039def2d10ad1d4a0ade3ef",
+    "patches/scripts/device/SdActivityManagerService.java.patch": "5b7d1d796814df65ef0974d94fae248ddc63480a739159b5ff890fe41f0e94f3"
+  }
+}

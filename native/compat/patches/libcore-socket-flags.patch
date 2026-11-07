@@ -1,0 +1,11 @@
+--- a/libcore/luni/src/main/native/android_system_OsConstants.cpp
++++ b/libcore/luni/src/main/native/android_system_OsConstants.cpp
+@@ -508,6 +508,8 @@
+     initConstant(env, c, "SIOCGIFBRDADDR", SIOCGIFBRDADDR);
+     initConstant(env, c, "SIOCGIFDSTADDR", SIOCGIFDSTADDR);
+     initConstant(env, c, "SIOCGIFNETMASK", SIOCGIFNETMASK);
++    initConstant(env, c, "SOCK_CLOEXEC", SOCK_CLOEXEC);
++    initConstant(env, c, "SOCK_NONBLOCK", SOCK_NONBLOCK);
+     initConstant(env, c, "SOCK_DGRAM", SOCK_DGRAM);
+     initConstant(env, c, "SOCK_RAW", SOCK_RAW);
+     initConstant(env, c, "SOCK_SEQPACKET", SOCK_SEQPACKET);

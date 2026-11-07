@@ -1,0 +1,12 @@
+--- r294/native/host/host-audio.cpp
++++ r304/native/host/host-audio.cpp
+@@ -61,7 +61,9 @@
+ static jint primary_frames(JNIEnv*e,jclass){return e->CallStaticIntMethod(audio_class,e->GetStaticMethodID(audio_class,"primaryOutputFrameCount","()I"));}
+ static void events(JNIEnv*e,jobject,jobject ref){e->CallStaticVoidMethod(audio_class,e->GetStaticMethodID(audio_class,"setupEvents","(Ljava/lang/Object;)V"),ref);}
+ static void finalize_events(JNIEnv*,jobject){} // weak-owner polling has no native allocation
++extern "C" int sd_camera_capability_install(JNIEnv*);
+ extern "C" JNIEXPORT void JNICALL Java_SdAudio_nativeInstall(JNIEnv*e,jclass c){
++ if(sd_camera_capability_install(e)<0||e->ExceptionCheck())return;
+  audio_class=(jclass)e->NewGlobalRef(c);
+  JNINativeMethod system[]={
+   {(char*)"getPrimaryOutputSamplingRate",(char*)"()I",(void*)primary_rate},

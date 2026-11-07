@@ -1,0 +1,37 @@
+{
+  "candidate": "r305",
+  "scope": "Selected source and recipes; SDK29/34 lifecycle fixtures and bounded real QQ functional regression passed. Activated as daily release; this is not a new full CTS result.",
+  "selected_fixture_recipes": [
+    "build-fixtures-v2-vm.py",
+    "phone-fixtures-v2-vm.py"
+  ],
+  "files": {
+    "README.md": "6db505d4812b3e4e73ba9eac1f723b3a8be9ab0b391fd8d6839183fbbf40f9fa",
+    "SdApkPackage.java.patch": "c06e5db58577297166f35bc4550ed157eaaacee16e3db8515eded7638c518629",
+    "SdAudio.java.patch": "ef78970da34711518be7b3587228bcc682b70ff6d5ab4c4a624558caa9511bb9",
+    "build-fixtures-v2-vm.py": "743275911390a69feefc16d0f06ada4b5985772c5e17f5e72fe552d038319861",
+    "build-fixtures-vm.py": "2226596c72a7038ba8966637e0669642ef49ea5af22bf92ed15a5ecc00241dfa",
+    "build-runtime-vm.py": "4839e318c33825a5b908d70ffacd4d1d65e2296cc426542be64de4ca47273a45",
+    "encode-runtime-vm.py": "d9a9baa9a1517e196b10a6b20653e6d36ef7652ee3360badc4b0156b6d554406",
+    "package-vm.py": "c13974bb65ea8f6ec02766542b27e9a0b383248a505d5f4161aea5667436feb5",
+    "phone-fixtures-v2-vm.py": "2ba91c7b55bdf4a4a07ac4711ee1b1353d029f997094a1f7566a31459929e891",
+    "phone-fixtures-vm.py": "dcdf22b9f4b297ecebe4113917229b24065d9cafead5a795bf920787e2a49018",
+    "probe-fixture-phone.py": "c517a6c2671f3c8bab5a0dfc5251fe8a955d8b6e6df61c3ecd2881f918b748df",
+    "source/scripts/device/SdApkPackage.java": "3583923978d611c85dd52e5b8eca0ae4dbd529ab580c45ebd0efe72cd012eade",
+    "source/scripts/device/SdAudio.java": "96ba85bd1c79a6f49e0e11b7e86b67e3d889e65373a33f5f62d0e359233bc4fe",
+    "stage-incremental-v2-vm.py": "bce0a4b9e4e625c81defe2276281c1b7a0a719ccf2d267995181a841b068171f",
+    "test-source/org/example/saildroid/lifecycle/DefaultService.java": "5063af7e28def58fa6a9a85c92ce5bc6630d36818668abcb110873fd1d580b6b",
+    "test-source/org/example/saildroid/lifecycle/LifecycleActivity.java": "37fbab27cf810faef534108ff8bc65723067202ffe093de7e670b9770feb1905",
+    "test-source/org/example/saildroid/lifecycle/LifecycleService.java": "f5c3417c515f7611e6ead065d7da16205d62ba2150ea5a20fdf4e1802f72f2ef"
+  },
+  "acceptance_proofs": {
+    "build/evidence/qq-surface-texture300-20261102-v1/texture-fixture-results.json": "2ee290d687868f8d2ea5182563c860772681f51173ea940b381ba54d90291893",
+    "build/evidence/qq-pending-intent301-20261102-v1/pending-fixture-results.json": "62d9175de436f451d0f9f42cbdf2292fd49434e54cef707060801f382732e29f",
+    "build/evidence/qq-strerror302-20261103-v1/phone-fixture-v3-results.json": "93854524af5d499f7e81426908279082fa436be12691a315d87d28024026a509",
+    "build/evidence/qq-camera-capability304-20261103-v1/camera-fixture-v3-results.json": "e7ffa4947ee720c6f4391a2fd27bf2c7e11efa03e9005965ea1699c4ca1b59f4",
+    "build/evidence/qq-service-lifecycle305-20261103-v1/lifecycle-fixture-v2-results.json": "afef9eb0ab03f8343635a36744740d29fed4f4ae58545ef7ef6f4102db794b7f",
+    "build/evidence/qq-r305-conversation-20261103-v1/conversation-audit-v1.json": "5d054eb9e6e843b7550869b5e192589a084732bca222859607fddac211422885",
+    "build/evidence/qq-r305-desktop-entry-20261103-v1/desktop-entry-audit.json": "5f4a684d2b97550b775982276572ad79f5dffa68173ba718d1bc35d226f034f8",
+    "build/evidence/r305-daily-activation-20261103-v1/final-health.json": "fdb477a564eb574d45a85415fa486304259fb6549458bfcba08cc8e75d168227"
+  }
+}

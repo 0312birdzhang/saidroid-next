@@ -1,0 +1,41 @@
+{
+  "scope": "Minimal original Android10 native Linux JNI argument/socket-address compatibility ports. Stops null socketpair abort/leak, fixes IPv6 address offset and existing IPv4 fallback/null sendto paths. No new native declarations, JNI class layout, platform APK/test or nested source changes.",
+  "baseline_source": "third_party/art-standalone/libcore/luni/src/main/native/libcore_io_Linux.cpp",
+  "baseline_sha256": "41c118d20d0f9c4513f8aee11e48f3db7dc1005b0ec11e253faf3660ae64a7ec",
+  "reference": "build/evidence/cts-frame-repair-20261031/aosp-extra/native196-inputs-v1/libcore_io_Linux.cpp",
+  "reference_sha256": "60019cfd27653b09eb1f0be65c0a1d343c7a200977a1fd4f6401a5179c2245b1",
+  "patched_sha256": "a9456b944c33799f151e99cb101ee56cc790630c8241175b1e226558c1ce8a93",
+  "patch_sha256": "a2483b0d39f7b1d184078f75312d0782c262250161ea2e865730571740605f6c",
+  "functions": {
+    "Linux_inet_pton": {
+      "before_sha256": "1603fee79f444a606c4db13bbd2e3a976200db9a1829292494a834451e6ddaee",
+      "android10_function_sha256": "59f75103a255d1e87da82b0823459ed0886cc17df309e5821c0e786e5c0bd65c",
+      "after_sha256": "59f75103a255d1e87da82b0823459ed0886cc17df309e5821c0e786e5c0bd65c",
+      "adaptation": null
+    },
+    "Linux_socketpair": {
+      "before_sha256": "d7bee6042663a8b45b45aecaac4b9ddfa03f8e5d6d1c7a46af9d8a23289bd582",
+      "android10_function_sha256": "7b13a3452f8d6686a15e74b962f29daff316919862dd92ef5c63a937186982f7",
+      "after_sha256": "7b13a3452f8d6686a15e74b962f29daff316919862dd92ef5c63a937186982f7",
+      "adaptation": null
+    },
+    "Linux_bindSocketAddress": {
+      "before_sha256": "7dd22183045f40701f98038ccc8a23f52edecad898dc6cd8bf9b5d2922f9d09e",
+      "android10_function_sha256": "5cf45784296e428972b564ad7fb8d36ae35bef180ad621f1ef395eb928265bf0",
+      "after_sha256": "29451af7eb9b1a1dd515788f2b201f815b3699ba7c37bd093bb900fdaddd6eec",
+      "adaptation": "Use existing cached JniConstants field instead of newer accessor; same class"
+    },
+    "Linux_connectSocketAddress": {
+      "before_sha256": "e05e42e0222412e47fa9e3715a455850f668abf75088c6ad522c2b6249e9f06d",
+      "android10_function_sha256": "cf943ad501857f6ec0d190252587e5806018cf7cf71751bcadb0339ea0debdc5",
+      "after_sha256": "4fa7af6f6776f7ef44cd9c1e83e6474946bbfaf6dbbed011f66b7c74c415be35",
+      "adaptation": "Use existing cached JniConstants field instead of newer accessor; same class"
+    },
+    "Linux_sendtoBytesSocketAddress": {
+      "before_sha256": "ebcf4a88453652e0d0ba1fd18ed9816b028ea608b616ab7351f3936e55ead0ca",
+      "android10_function_sha256": "9e16c2c80aa67baf076794b220caa950a3d10fb635df75cbbce8729e7e5175f9",
+      "after_sha256": "097aae6712e156210a134d31a9fe0afdb9ef6934eb535f2533321bde42b15c48",
+      "adaptation": "Use existing cached JniConstants field instead of newer accessor; same class"
+    }
+  }
+}

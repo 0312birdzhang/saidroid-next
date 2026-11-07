@@ -1,0 +1,15 @@
+{
+  "scope": "ARM64 Linuxhost Math.tan intrinsic paths use currentverified privateieee_tan backend; absentcompanion retainsoldstdtan fallback. Androidbuild unaffected, no globaltan interposition/Java/native declaration/SDK/heap/timeout/clock change.",
+  "patch": "native/compat/patches/art-host-math-tan.patch",
+  "patch_sha256": "ccb3d96d6ad62312f0611c107473a5d45a618cdf34ddced899e248022f178efd",
+  "sources": {
+    "art/runtime/arch/arm64/entrypoints_init_arm64.cc": {
+      "baseline_sha256": "e31b45fedb85fae7683d3b559dae6d6c0b0f33eea9fa82f297d72256129277a0",
+      "patched_sha256": "ab3ecbc212f3466b1951a1ca91237eb1d7283a3962ed9df44164bec22c3e1974"
+    },
+    "art/runtime/interpreter/interpreter_intrinsics.cc": {
+      "baseline_sha256": "edc79942a10c8ac6424e481a1fa6ac2a042127826ee0ee5e4b5519f911a7316d",
+      "patched_sha256": "bd9830e29663de380d66cd6eea7ee9fa1a1c3789642fe936db72d7c94aa44439"
+    }
+  }
+}

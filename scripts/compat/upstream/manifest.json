@@ -1,0 +1,23 @@
+{
+  "repository": "https://android.googlesource.com/platform/libcore",
+  "tag": "android-10.0.0_r47",
+  "commit": "2b72e0b8486db652721095e55f1f068b41989ce0",
+  "files": {
+    "CRC32Test.java": {
+      "sha256": "752416d49ceddf896fda4451c33173b4117a24cb5991991db3069344a919282b",
+      "path": "harmony-tests/src/test/java/org/apache/harmony/tests/java/util/zip/CRC32Test.java"
+    },
+    "Adler32Test.java": {
+      "sha256": "003d65879c4cd0d0756ed441eda71af237f682fc252ac0a77bd37bc4676cefd3",
+      "path": "harmony-tests/src/test/java/org/apache/harmony/tests/java/util/zip/Adler32Test.java"
+    },
+    "ArrayTest.java": {
+      "sha256": "860784d88749ed623729bd861ba8690f7cae6dfb275e8896aa68b269c54cf45d",
+      "path": "harmony-tests/src/test/java/org/apache/harmony/tests/java/lang/reflect/ArrayTest.java"
+    },
+    "IntegerTest.java": {
+      "sha256": "1a01ed369c4f2ec1cb0e7cd2f425e3cfb2887a88e6e0f256dedf1ba9e0e4d99d",
+      "path": "harmony-tests/src/test/java/org/apache/harmony/tests/java/lang/IntegerTest.java"
+    }
+  }
+}

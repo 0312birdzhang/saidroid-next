@@ -1,0 +1,74 @@
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -566,6 +566,42 @@
+ static ElfW(Sym) * apkenv__elf_lookup(soinfo *si, struct symbol_name *symbol_name)
+ {
+ 	return is_gnu_hash(si) ? apkenv__elf_lookup_gnu(si, symbol_name) : apkenv__elf_lookup_sysv(si, symbol_name);
++}
++
++
++/* Caller holds the recursive dl lock, so owner/checker cannot disappear during
++ * dispatch. No address cache or extra reference pins an unloadable DSO. */
++static bool apkenv_cfi_mapped(const soinfo *si, ElfW(Addr) address, bool executable)
++{
++	ElfW(Addr) relative = address - si->base;
++	for (int i = 0; i < si->phnum; i++) {
++		const ElfW(Phdr) *p = &si->phdr[i];
++		if (p->p_type == PT_LOAD && relative >= p->p_vaddr &&
++		    relative - p->p_vaddr < p->p_memsz &&
++		    (!executable || (p->p_flags & PF_X)))
++			return true;
++	}
++	return false;
++}
++
++int apkenv_cfi_check_locked(uint64_t type, void *target, void *diagnostic)
++{
++	soinfo *si = apkenv_find_containing_library(target);
++	if (!si) return 0; /* Host/glibc mapping uses its own dispatcher. */
++	if (!(si->flags & FLAG_LINKED) || (si->flags & FLAG_ERROR) ||
++	    !si->phdr || !apkenv_cfi_mapped(si, (ElfW(Addr))target, false))
++		return -1;
++	/* Cross-DSO virtual-call checks can target read-only vtable data, so
++	 * validate a real PT_LOAD range rather than requiring executable data. */
++	struct symbol_name name = { .name = "__cfi_check" };
++	ElfW(Sym) *symbol = apkenv__elf_lookup(si, &name);
++	if (!symbol) return 1; /* This owner is genuinely not CFI-instrumented. */
++	ElfW(Addr) checker = si->base + symbol->st_value;
++	if (ELF_ST_TYPE(symbol->st_info) != STT_FUNC ||
++	    !apkenv_cfi_mapped(si, checker, true))
++		return -1;
++	((void (*)(uint64_t, void *, void *))checker)(type, target, diagnostic);
++	return 1;
+ }
+ 
+ const char *apkenv_last_library_used = NULL;
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -277,6 +277,7 @@
+ ElfW(Sym) *apkenv_lookup_in_library(soinfo **found, const char *name);
+ ElfW(Sym) *apkenv_lookup(const char *name, soinfo **found, soinfo *start);
+ soinfo *apkenv_find_containing_library(const void *addr);
++__attribute__((visibility("hidden"))) int apkenv_cfi_check_locked(uint64_t type, void *target, void *diagnostic);
+ ElfW(Sym) *apkenv_find_containing_symbol(const void *addr, soinfo *si);
+ const char *apkenv_linker_get_error(void);
+ void apkenv_call_constructors_recursive(soinfo *si);
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -120,6 +120,16 @@
+ 	return (const char *)tmp;
+ }
+ 
++/* Explicit private-loader API: check against the current owner under the
++ * same lock used for dlopen/dlclose, without symbolizing every target. */
++int bionic_cfi_check(uint64_t type, void *target, void *diagnostic)
++{
++	pthread_mutex_lock(&apkenv_dl_lock);
++	int result = apkenv_cfi_check_locked(type, target, diagnostic);
++	pthread_mutex_unlock(&apkenv_dl_lock);
++	return result;
++}
++
+ enum {
+ 	WRAPPER_DYNHOOK,
+ };

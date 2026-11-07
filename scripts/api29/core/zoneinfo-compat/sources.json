@@ -1,0 +1,15 @@
+{
+  "files": {
+    "libcore/util/ZoneInfo.java": {
+      "scope": "Exact Android10 constructor restores first non-DST type and signed DST savings; WallTime pretransition read uses a package helper to retain existing synthetic/private/native member descriptors",
+      "source": "libcore/util/ZoneInfo.java",
+      "sha256": "d50dd9ef6a8c39b8edd8f1cf4c0a788caaad4ffebc4db3425eb7af983219ab1a",
+      "baseline_source": "third_party/art-standalone/libcore/luni/src/main/java/libcore/util/ZoneInfo.java",
+      "baseline_sha256": "1eddbd521115434a110bc4ca6159e28969984bec8cad2ee30861debd4fa86e1e",
+      "upstream_source": "build/evidence/cts-frame-repair-20261031/aosp-extra/ZoneInfo-api29.java",
+      "upstream_sha256": "d9e59f9916ce221f18f5e2fa1aac424a4cfc914c23d5d06160dd512d9542c518",
+      "constructor_sha256": "cf15d6db3227a8f2e32c06cf781b7a0dddc132d7b61c400fd729a1af1247af98",
+      "new_helper": "getEarliestRawOffsetForWallTime()I"
+    }
+  }
+}

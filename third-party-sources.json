@@ -1,0 +1,33 @@
+{
+  "schema": "saidroid-third-party-sources-v1",
+  "dependencies": [
+    {
+      "path": "third_party/art-standalone",
+      "url": "https://gitlab.com/android_translation_layer/art_standalone.git",
+      "revision": "a1edfc40e8cea3644d80e4e776d3fa7fc397a1c2",
+      "patch": "patches/third-party/art-standalone.patch",
+      "patch_sha256": "67cac1f479cc9151680d9d5904cc33eb8876702090b05a690675d0b92ad1d288",
+      "development_revision": "b88caba775b448ab4682c92374accda9868559ef",
+      "patch_includes_local_commits_and_worktree": true
+    },
+    {
+      "path": "third_party/bionic_translation",
+      "url": "https://gitlab.com/android_translation_layer/bionic_translation.git",
+      "revision": "6253dec7f24a57a94039a088cb436d880e92e3be",
+      "patch": "patches/third-party/bionic_translation.patch",
+      "patch_sha256": "a5dee946ce8f2b396fc6f79fe5f61cd2f6e4e2ad8a6129d34dd79ead3bd0a77f",
+      "development_revision": "8ab395c794d4cb0e29f1bc58fcb850e2fa7e1357",
+      "patch_includes_local_commits_and_worktree": true
+    },
+    {
+      "path": "third_party/vixl",
+      "url": "https://github.com/Linaro/vixl.git",
+      "revision": "e23693bc57e4102cc0dd58ce261a198c3cffd1af"
+    },
+    {
+      "path": "third_party/vixl-aosp",
+      "url": "https://android.googlesource.com/platform/external/vixl",
+      "revision": "84f5ed23e4b5a07cef857a8ed0c9fcee009fe93d"
+    }
+  ]
+}

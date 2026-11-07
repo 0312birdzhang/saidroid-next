@@ -1,0 +1,95 @@
+{
+  "scope": "Android10 covariant compatibility declarations only over exact legacy core; toolchain emits real bridges",
+  "files": {
+    "java/nio/Buffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/Buffer.java",
+      "baseline_sha256": "02f874c6115caa4fef9b303692db71bb68bbece3e6c79e609a29c63dda198c3a",
+      "sha256": "fa89aa8d88806c42811d4eb1702de85434a8123b8013b01034500094e23dee8a",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/Buffer.java?format=TEXT",
+        "sha256": "da9698eedb23fb1ccfb8ee34a5a54c71e0653840037b3330cd7c694443fcf011"
+      },
+      "patch_scope": "Remove final from seven Buffer mutators"
+    },
+    "java/nio/ByteBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/ByteBuffer.java",
+      "baseline_sha256": "4643600ad1ed3e47cff5906ff13060ead1c30eb5dfbba300f5a44f8372022d97",
+      "sha256": "1e8ddbac7fe6e97d3bad267cc7ac5849bf7e19ec6a9206587b3570a65decb2c0",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/ByteBuffer.java?format=TEXT",
+        "sha256": "212179f1ecb3999f91a415b83077ffc9b4fd04c2fd264a03031fec677e5abe02"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/CharBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/CharBuffer.java",
+      "baseline_sha256": "b53e797827e798d9868c1cd610f80c7933129cde18e7db69660ed2b9e412d23a",
+      "sha256": "1c65cb6bbd963bd9b868e48a2c2a01211f99209dc36f2951161ded03f2ac6b46",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/CharBuffer.java?format=TEXT",
+        "sha256": "f475d7c05b5c30ac078239a6bac94a3c4ec9a9632c8e62e2c75813cd61dbd03b"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/ShortBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/ShortBuffer.java",
+      "baseline_sha256": "30e35d54a49d533c9c45f3728131e7bdcd8fb92284330ba89875034ed5a04daa",
+      "sha256": "3b56385d03c21ce8023530e99c165c00d6b0d62a366999593ea4ade23e7fb391",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/ShortBuffer.java?format=TEXT",
+        "sha256": "fc35aad03ed6495ef37c21a57dc1f592a19456854f35dd9c576b611fe9cd297b"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/IntBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/IntBuffer.java",
+      "baseline_sha256": "cafbbccdb1d8853565f231e186422067fc3c70c38e03e07c76ff51d662473824",
+      "sha256": "a51230bb82fff09b59402a038913cfbd9a9b9e637546f6c7477f12fd4b34f1bb",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/IntBuffer.java?format=TEXT",
+        "sha256": "3d8589fc0e7ac13f88a148d695af64f16029ddf09fdeb9f3d1ec2d16c9f8f2ff"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/LongBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/LongBuffer.java",
+      "baseline_sha256": "b84f5c17033fcc39d002d0e9ef83e7b7e3c322b882cc6e5717e203e5f3d1bac1",
+      "sha256": "a945d5ac1ceb265a4e749c615c2afb1c0ba48d4440917b43b716721e583edf65",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/LongBuffer.java?format=TEXT",
+        "sha256": "167e6fd25cee22a2ee19247defada317054219857cdd68a1c44c5b30e668e71e"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/FloatBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/FloatBuffer.java",
+      "baseline_sha256": "323cc9da5b11096a09977ac3528caaec50c82c8beb8e67f33c68c0433eff8e80",
+      "sha256": "ebe84a1cffbb5cb2e1d7bca754e59d362f152fa2989335a0dfafca630e729ee5",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/FloatBuffer.java?format=TEXT",
+        "sha256": "444b8558559183f563d4a38ce722d8e30f821856193ea388a9180262b0d07e0f"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/nio/DoubleBuffer.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/nio/DoubleBuffer.java",
+      "baseline_sha256": "919fcf9d6f256180d2469b43d487a75ba8837df94c7908c2eece5c26ff082a44",
+      "sha256": "bd3a152d822b5acaeabcad0793cae91355070450c4f223cd716ac22a43f1663e",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/nio/DoubleBuffer.java?format=TEXT",
+        "sha256": "304b8d68b7b41ee64aa35e1aff9f669f5d186658f04fb8da63d8a892b36de8a2"
+      },
+      "patch_scope": "Add exact seven AOSP delegated overrides with their toolchain annotations"
+    },
+    "java/util/concurrent/ConcurrentHashMap.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/concurrent/ConcurrentHashMap.java",
+      "baseline_sha256": "8d05c11a1e9ba2acea3257e6e593cbd0053c6c60e255bfbe6902be20e7f80919",
+      "sha256": "722998d2dcd1fded76bd4940388596a565bf88d374232db5f64018691f4be2fc",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/concurrent/ConcurrentHashMap.java?format=TEXT",
+        "sha256": "17095048c674ba22077904067620d56308a73651b70f6bee5f6189ef00dee0b0"
+      },
+      "patch_scope": "Add exact AOSP @CovariantReturnType annotation to existing keySet"
+    }
+  }
+}

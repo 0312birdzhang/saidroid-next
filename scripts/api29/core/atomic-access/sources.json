@@ -1,0 +1,45 @@
+{
+  "scope": "Restore real Java caller/member access boundary for AtomicFieldUpdater; no test or hidden API bypass",
+  "files": {
+    "java/util/concurrent/atomic/AtomicIntegerFieldUpdater.java": {
+      "sha256": "077d34dc9cf05a761836278f83f70f8f8ecc3626d99c0dc2a7abb9563e3bdb96",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/concurrent/atomic/AtomicIntegerFieldUpdater.java",
+      "baseline_sha256": "0052e4ce2aa91c5785a5c16be5517acc548141d659963b610c0e933b99f4371d",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/concurrent/atomic/AtomicIntegerFieldUpdater.java?format=TEXT",
+        "sha256": "8c460ca492230114d90f4588282324c3466a4a0e8bb3057a05f0442bef87a8cf"
+      },
+      "scope": "Restore original Android10 caller member access check only; retain VMStack caller acquisition, all old declarations/native ABI"
+    },
+    "java/util/concurrent/atomic/AtomicLongFieldUpdater.java": {
+      "sha256": "e57d0db48ead4dd23a09eeef036c4e40b43ee53bf3e1e4acf8531a82908c8ef1",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/concurrent/atomic/AtomicLongFieldUpdater.java",
+      "baseline_sha256": "60ce3f15de96ed7fb5d1a912fce45851ef64ffc2be0d1ac992ba02d4137651ea",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/concurrent/atomic/AtomicLongFieldUpdater.java?format=TEXT",
+        "sha256": "c03cd4e7799a8610d09012f0def5df78a69e2ef6b69987373d7ef9af15a49994"
+      },
+      "scope": "Restore original Android10 caller member access check only; retain VMStack caller acquisition, all old declarations/native ABI"
+    },
+    "java/util/concurrent/atomic/AtomicReferenceFieldUpdater.java": {
+      "sha256": "2ba3c2f70922e6f6dea99e471fa702c192f70f556c96d769cf782b2cb71efe52",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/concurrent/atomic/AtomicReferenceFieldUpdater.java",
+      "baseline_sha256": "f6952992bb825ba4066145f986239f3961d754b87f1f634f980177243e11a3bb",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/concurrent/atomic/AtomicReferenceFieldUpdater.java?format=TEXT",
+        "sha256": "5d261dfcdbbaadc4ef245e9b6710f6782c295dac1baecfac8ce77b4d0fb6fa73"
+      },
+      "scope": "Restore original Android10 caller member access check only; retain VMStack caller acquisition, all old declarations/native ABI"
+    },
+    "sun/reflect/misc/ReflectUtil.java": {
+      "sha256": "729b24720488a50c25e973a563d353198cd3ae0648d63e3cdf67357bef884006",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/sun/reflect/misc/ReflectUtil.java",
+      "baseline_sha256": "2cab3325fd7d9c0e7f69955bf0bd1822cf2b5ac6bce1b18a8ce795a1cab73875",
+      "upstream": {
+        "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/sun/reflect/misc/ReflectUtil.java?format=TEXT",
+        "sha256": "13daa012dd3d1aeb4f6a51ad1238030db9c925f43ee256727f0ba51ed5d28543"
+      },
+      "scope": "Add exact Android10 ensureMemberAccess helper, including protected-target workaround; all other code unchanged"
+    }
+  }
+}

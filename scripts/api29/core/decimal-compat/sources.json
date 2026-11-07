@@ -1,0 +1,29 @@
+{
+  "files": {
+    "java/text/DecimalFormat.java": {
+      "source": "java/text/DecimalFormat.java",
+      "sha256": "db414119f9c125f668618a5210d09881f2a8e2d2be3fc33f4f507421b52b7a4d",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/text/DecimalFormat.java",
+      "baseline_sha256": "dfdfcd70d6865330c4a9b7cde5184cfa9930cdb07d18d1ec177298beab12794e",
+      "upstream_sha256": "32304f9bf306c83691e61fecadead59a58d785011cd765ec041bdf93cbddfed3",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/text/DecimalFormat.java?format=TEXT",
+      "scope": "Exact four Android10 bindings to its ICU58-compatible DecimalFormat adapter within unchanged ICU63 implementation/data; no native ICU downgrade; public/protected/native declarations unchanged"
+    },
+    "java/text/DecimalFormatSymbols.java": {
+      "sha256": "3a3101b4d4077e267511675c8c88280b0f491340371904c273a625c7a7104c94",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/text/DecimalFormatSymbols.java",
+      "baseline_sha256": "4cce669db16ad2575c1f25787481142c3fc064eb56c05192caf3c842cb534101",
+      "upstream_sha256": "339b310211461d8baa5b5377ac8f38c0111859bc79897e90883c3c607e46b3c2",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/text/DecimalFormatSymbols.java?format=TEXT",
+      "scope": "Exact three Android10 ICU symbol setter calls for plus, monetary grouping, per-mill; all declarations retained; Android10 complete-symbol maybeStripMarkers conversion for per-mill, reading real ICU63 getPerMillString rather than truncating legacy native char ABI"
+    },
+    "libcore/icu/LocaleData.java": {
+      "sha256": "ea730a47b0a24bb10a92c0d950291ab6ff441a00f44e187e51aab21be2c6df42",
+      "baseline_source": "third_party/art-standalone/libcore/luni/src/main/java/libcore/icu/LocaleData.java",
+      "baseline_sha256": "26495c0099a3154b33e00b0c9a51050e3ffbef1021f48c6824331c92b7573950",
+      "upstream_sha256": "fe3b6219330997ec4b6c85bc99329111eaee90ce720ca2f332c3430f81ef19c0",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/luni/src/main/java/libcore/icu/LocaleData.java?format=TEXT",
+      "scope": "Exact Android10 initializePatternSeparator helper and call/imports only; retain existing LocaleData Java/native field ABI including char percent/perMill; reads actual ICU63 numbering-system resources"
+    }
+  }
+}

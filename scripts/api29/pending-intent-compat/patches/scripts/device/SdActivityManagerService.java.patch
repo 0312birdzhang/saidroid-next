@@ -1,0 +1,41 @@
+--- build/evidence/qq-manifest-receivers292-20261102-v1/source/scripts/device/SdActivityManagerService.java
++++ scripts/device/SdActivityManagerService.java
+@@ -26,6 +26,7 @@
+ import java.util.IdentityHashMap;
+ 
+ public final class SdActivityManagerService implements InvocationHandler {
++    private final SdPendingIntents pendingIntents = new SdPendingIntents(this);
+     private final Binder binder = new Binder();
+     private final IActivityManager service;
+     private final int pid = Process.myPid();
+@@ -197,6 +198,16 @@
+         System.err.println("SDBROADCAST=manifest_finished|pending="+manifestReceiversPending+"|process="+processName);
+     }
+ 
++    void dispatchPendingBroadcast(Intent intent,String type,int code,String permission,int user) throws Exception {
++        String[] permissions=permission==null?null:new String[]{permission};
++        if(intent.getComponent()!=null) {
++            SdManifestReceivers.send(intent,code,null,null,permissions,user);
++        } else {
++            deliverBroadcast(intent,type,code,null,null,permissions,user,false);
++            if(SdKernelServices.enabled())SdRemoteServices.broadcast(intent,type,code,null,null,permissions,user);
++        }
++    }
++
+     private int broadcastIntent(Object[] args) throws Exception {
+         Intent intent=(Intent)args[1];if(intent==null)throw new IllegalArgumentException("Intent is required");
+         if(args[3]!=null||(Boolean)args[10]||(Boolean)args[11]||(Integer)args[8]!=-1||args[9]!=null)throw new UnsupportedOperationException("Ordered/sticky/app-op/options broadcasts unavailable");
+@@ -414,6 +425,13 @@
+             // This host's launch request supplied no ActivityOptions bundle.
+             return null;
+         }
++        if ("getIntentSender".equals(name)||"cancelIntentSender".equals(name)||"sendIntentSender".equals(name)
++                ||"getPackageForIntentSender".equals(name)||"getUidForIntentSender".equals(name)
++                ||"getIntentForIntentSender".equals(name)||"getTagForIntentSender".equals(name)
++                ||"isIntentSenderAnActivity".equals(name)||"isIntentSenderAForegroundService".equals(name)
++                ||"isIntentSenderABroadcast".equals(name)||"isIntentSenderTargetedToPackage".equals(name)
++                ||"registerIntentSenderCancelListener".equals(name)||"unregisterIntentSenderCancelListener".equals(name))
++            return pendingIntents.invoke(name,args);
+         if ("registerReceiver".equals(name)) return registerReceiver(args);
+         if ("unregisterReceiver".equals(name)) {
+             unregisterReceiver((IIntentReceiver) args[0]);

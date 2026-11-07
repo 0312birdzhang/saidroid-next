@@ -1,0 +1,16 @@
+{
+  "scope": "Only exact Android10 UTF8 maximal-subpart decoder block and lookup table ported; all other StringFactory source/native declarations unchanged",
+  "files": {
+    "java/lang/StringFactory.java": {
+      "baseline_source": "third_party/art-standalone/libcore/libart/src/main/java/java/lang/StringFactory.java",
+      "baseline_sha256": "059026ea36098b3188dd8f28309ec75c5778264efa17ddad42debe1a14fdc2c9",
+      "upstream_source": "aosp-extra/StringFactory-api29-189.java",
+      "upstream_sha256": "79d04600a2b31e6493e1ee5c71538cc340cdebd71b94b1c5624860f30b6edc4b",
+      "sha256": "32f3e451e096825027e3b1fea4926d3ca3763701ba2d349a6a39d16e0bf5ebf5",
+      "old_block_sha256": "b5f3701335021e3ffc1ec4ecf0c33218ba5a0ae7f2c87170ca0f6208fac3ec46",
+      "new_block_sha256": "c5c7f9bce24de1b4065d0601799009113964aa720f13fe4cbc6b59d1080e0b95",
+      "table_sha256": "ee7da576de5aee0259ff1e85f328910ebd65fc804597cc5afe8c8428f4a7ad7f",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/libart/src/main/java/java/lang/StringFactory.java?format=TEXT"
+    }
+  }
+}

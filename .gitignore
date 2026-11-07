@@ -1,0 +1,15 @@
+/build/
+/outputs/
+/runtime/
+/test/*.apk
+*.rpm
+*.class
+*.pyc
+__pycache__/
+.private/
+.codex-private-recovery/
+*.jks
+*.keystore
+*.p12
+*.pk8
+.DS_Store

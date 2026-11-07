@@ -1,0 +1,10 @@
+{
+  "base": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/TimeZone.java",
+  "base_sha256": "3ecc06331275e6f938960e63f2a61e6380de5fcf425f1db8a62846dc437c602c",
+  "matching_platform": {
+    "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r47/ojluni/src/main/java/java/util/TimeZone.java?format=TEXT",
+    "sha256": "a465063a9a5526ddf42c4e96f7276d167851dc5c65dc70c8c67d63071dc474d1"
+  },
+  "adaptation": "Only setDefault ICU cache invalidation call follows matching Android10 setICUDefault(null); existing standalone zone database API retained",
+  "sha256": "684a2ea75cd2c18976ccf5ac380a44ab6e9f0840f0578064e630ad4a649f9eae"
+}

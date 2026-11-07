@@ -1,0 +1,1220 @@
+diff --git a/libc/libc-misc.c b/libc/libc-misc.c
+index c46c010..8c80697 100644
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -5,40 +5,9 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-// this seems to not be a stable ABI, so hopefully nobody treats it as such
+-// FIXME: move this out into it's own file whenever we get to implementing it more properly
+-struct prop_info {
+-	const char *name;
+-};
+-
+-#define PROP_NAME_MAX  32
+-#define PROP_VALUE_MAX 92
+-
+-const struct prop_info *bionic___system_property_find(const char *name)
+-{
+-	struct prop_info *ret = malloc(sizeof(struct prop_info));
+-	ret->name = name;
+-
+-	return ret;
+-}
+-
+-int bionic___system_property_read(const struct prop_info *prop_info, char *name, char *value)
+-{
+-	if (name)
+-		strncpy(name, prop_info->name, PROP_NAME_MAX);
+-
+-	if (!value)
+-		return 0;
+-
+-	if (!strcmp(prop_info->name, "ro.build.fingerprint")) {
+-		strncpy(value, "", PROP_VALUE_MAX); // there is no good reason that apps should need this, so just return an empty string
+-	} else {
+-		printf("__system_property_find: >%s< not handled yet\n", prop_info->name);
+-		strncpy(value, "", PROP_VALUE_MAX);
+-	}
+-
+-	return strlen(value);
+-}
++/* 系统属性实现已移到 libc/props.c（真正的属性表 + build.prop 载入）。
++ * 这里原来是一个永远返回空串的桩，会让 android.os.Build 静态初始化拿不到 abilist，
++ * 进而 ArrayIndexOutOfBoundsException。 */
+ 
+ // actually misc stuff
+ 
+@@ -69,18 +38,34 @@ char *bionic_setlocale(int category, const char *locale)
+ }
+ 
+ char *bionic_getenv(const char *name) {
+-	if(!name) {
+-		printf("!!! NULL passed to %s\n", __func__);
++	if (!name) {
++		return NULL;
+ 	}
+ 
+-	if(!strcmp(name, "HOME"))
+-		return NULL;
++	/* 这里原本把 ANDROID_ROOT 写死成 "/system"、HOME 直接返回 NULL。
++	 * 那是 apkenv 时代的取舍（"apps 会把它和写死路径混用"），
++	 * 但对 SaiDroid 这种把 Android 运行时部署在真实目录里的用法正好相反：
++	 * ART 的 AssetManager::addDefaultAssets() 要用 ANDROID_ROOT 拼出
++	 * $ANDROID_ROOT/framework/framework-res.apk，写死成 /system 就必然找不到，
++	 * 于是 ResTable 载不进来，getResources(true) 返回 NULL，
++	 * Java 侧的 getStringBlockCount() 直接空指针崩掉。
++	 * 正确做法：真实环境变量优先，宿主没设时才退回原来的默认值。 */
++	{
++		const char *v = getenv(name);
++		if (v) {
++			return (char *)v;
++		}
++	}
+ 
+-	/* no point returning anything else, apps mix this with using hardcoded paths */
+-	if(!strcmp(name, "ANDROID_ROOT"))
++	if (!strcmp(name, "ANDROID_ROOT")) {
+ 		return "/system";
++	}
+ 
+-	return getenv(name);
++	if (!strcmp(name, "HOME")) {
++		return NULL;
++	}
++
++	return NULL;
+ }
+ 
+ /* __gnu_strerror_r emulates glibc's strerror_r.
+@@ -101,3 +86,6 @@ char* bionic___gnu_strerror_r(int error_number, char* buf, size_t buf_len) {
+ 	return buf;
+ #endif
+ }
++
++
++/* 无前缀的 __system_property_* 也在 libc/props.c 里，与 bionic_ 前缀版共用同一份实现。 */
+diff --git a/libc/libc.c b/libc/libc.c
+index 0f57724..96b0a60 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -1,4 +1,10 @@
++#define _GNU_SOURCE
+ #include "../wrapper/verbose.h"
++#include <stdarg.h>
++#include <dlfcn.h>
++#include <sys/mman.h>
++#include <execinfo.h>
++#include <stdint.h>
+ #include <assert.h>
+ #include <dirent.h>
+ #include <errno.h>
+@@ -61,16 +67,8 @@ struct bionic_sigaction {
+ #define PROP_NAME_MAX  32
+ #define PROP_VALUE_MAX 92
+ 
+-int __system_property_get(const char *name, char *value)
+-{
+-	verbose("%s", name);
+-
+-	if (!strcmp(name, "ro.build.version.sdk"))
+-		return snprintf(value, PROP_VALUE_MAX, "%d", 21);
+-
+-	*value = 0;
+-	return 0;
+-}
++/* __system_property_get 已移到 libc/props.c：那里是真正的属性表，
++ * 不再返回空串。 */
+ 
+ pid_t gettid(void)
+ {
+@@ -108,7 +106,159 @@ size_t __real_IO_file_xsputn(FILE *f, const void *buf, size_t n) { return 0; }
+ 
+ const unsigned int bionic___page_size = PAGE_SIZE;
+ 
+-__attribute_const__ int *
++/* bionic libc 的 malloc 调试全局量，Android 框架库会直接引用 */
++int gMallocLeakZygoteChild = 0;
++int gMallocDebugLevel = 0;
++int gMallocDebugEnabled = 0;
++
++/* bionic 的 C++ ABI 入口。libandroid_runtime/libhwui 等直接引用，
++ * 但它们的直接依赖里没有 libc++.so，这里在 libc 层提供，
++ * 保证符号解析不依赖加载顺序。*/
++void __cxa_pure_virtual(void) { abort(); }
++void __cxa_deleted_virtual(void) { abort(); }
++
++/* bionic fortify（_FORTIFY_SOURCE）检查函数。Android 库普遍引用；
++ * 语义：多出的最后一个参数是目标/源缓冲长度，超界即中止。*/
++void* __memcpy_chk(void* dst, const void* src, size_t n, size_t dlen) { if (n > dlen) abort(); return memcpy(dst, src, n); }
++void* __memmove_chk(void* dst, const void* src, size_t n, size_t dlen) { if (n > dlen) abort(); return memmove(dst, src, n); }
++void* __memset_chk(void* dst, int c, size_t n, size_t dlen) { if (n > dlen) abort(); return memset(dst, c, n); }
++void* __memchr_chk(const void* s, int c, size_t n, size_t slen) { if (n > slen) abort(); return (void*)memchr(s, c, n); }
++void* __memrchr_chk(const void* s, int c, size_t n, size_t slen) { if (n > slen) abort(); return (void*)memrchr(s, c, n); }
++char* __strcpy_chk(char* dst, const char* src, size_t dlen) { if (strlen(src) >= dlen) abort(); return strcpy(dst, src); }
++char* __strncpy_chk(char* dst, const char* src, size_t n, size_t dlen) { if (n > dlen) abort(); return strncpy(dst, src, n); }
++char* __strcat_chk(char* dst, const char* src, size_t dlen) { if (strlen(dst) + strlen(src) >= dlen) abort(); return strcat(dst, src); }
++char* __strncat_chk(char* dst, const char* src, size_t n, size_t dlen) { if (strlen(dst) + n >= dlen) abort(); return strncat(dst, src, n); }
++size_t __strlen_chk(const char* s, size_t slen) { size_t r = strlen(s); if (r >= slen) abort(); return r; }
++char* __strchr_chk(const char* s, int c, size_t slen) { const char* r = strchr(s, c); if (r && (size_t)(r - s) >= slen) abort(); return (char*)r; }
++char* __strrchr_chk(const char* s, int c, size_t slen) { const char* r = strrchr(s, c); if (r && (size_t)(r - s) >= slen) abort(); return (char*)r; }
++int __vsnprintf_chk(char* dst, size_t n, int flags, size_t dlen, const char* fmt, va_list ap) { (void)flags; if (n > dlen) abort(); return vsnprintf(dst, n, fmt, ap); }
++int __snprintf_chk(char* dst, size_t n, int flags, size_t dlen, const char* fmt, ...) { (void)flags; if (n > dlen) abort(); va_list ap; va_start(ap, fmt); int r = vsnprintf(dst, n, fmt, ap); va_end(ap); return r; }
++int __vsprintf_chk(char* dst, int flags, size_t dlen, const char* fmt, va_list ap) { (void)flags; return vsnprintf(dst, dlen, fmt, ap); }
++int __sprintf_chk(char* dst, int flags, size_t dlen, const char* fmt, ...) { (void)flags; va_list ap; va_start(ap, fmt); int r = vsnprintf(dst, dlen, fmt, ap); va_end(ap); return r; }
++ssize_t __read_chk(int fd, void* buf, size_t n, size_t buflen) { if (n > buflen) abort(); return read(fd, buf, n); }
++ssize_t __write_chk(int fd, const void* buf, size_t n, size_t buflen) { if (n > buflen) abort(); return write(fd, buf, n); }
++ssize_t __recvfrom_chk(int fd, void* buf, size_t n, size_t buflen, int flags, void* addr, socklen_t* alen) { if (n > buflen) abort(); return recvfrom(fd, buf, n, flags, addr, alen); }
++ssize_t __sendto_chk(int fd, const void* buf, size_t n, size_t buflen, int flags, const void* addr, socklen_t alen) { if (n > buflen) abort(); return sendto(fd, buf, n, flags, addr, alen); }
++void __FD_SET_chk(int fd, void* set, size_t setsize) { (void)setsize; FD_SET(fd, (fd_set*)set); }
++int __FD_ISSET_chk(int fd, const void* set, size_t setsize) { (void)setsize; return FD_ISSET(fd, (const fd_set*)set); }
++size_t __fread_chk(void* buf, size_t buflen, size_t size, size_t n, FILE* f) { if (size * n > buflen) abort(); return fread(buf, size, n, f); }
++size_t __fwrite_chk(const void* buf, size_t buflen, size_t size, size_t n, FILE* f) { if (size * n > buflen) abort(); return fwrite(buf, size, n, f); }
++char* __fgets_chk(char* buf, size_t buflen, int n, FILE* f) { if ((size_t)n > buflen) abort(); return fgets(buf, n, f); }
++
++/* bionic 其它常用入口 */
++char* __strncpy_chk2(char* dst, const char* src, size_t n, size_t dlen, size_t slen)
++{
++	(void)slen;
++	if (n > dlen) abort();
++	return strncpy(dst, src, n);
++}
++int __gnu_strerror_r(int errnum, char* buf, size_t buflen)
++{
++	return strerror_r(errnum, buf, buflen);
++}
++char* __gnu_basename(const char* path)
++{
++	return basename((char*)path);
++}
++/* bionic 特有入口 */
++int pthread_gettid_np(pthread_t t) { (void)t; return (int)syscall(SYS_gettid); }
++
++/* Android 的 EGL 扩展入口：宿主 libEGL（glvnd）没有 KHR 同步扩展。
++ * 这里给最小实现，保证图形库能完成链接；真实 GL 通路在渲染阶段接。*/
++int eglClientWaitSyncKHR(void* dpy, void* sync, int flags, long long timeout)
++{
++	(void)dpy; (void)sync; (void)flags; (void)timeout;
++	return 0x3005; /* EGL_TIMEOUT_EXPIRED_KHR */
++}
++/* 用 asm 标签导出 C++ 修饰名，满足 framework 库对 Android EGL 入口的引用 */
++int __get_h_errno(void) { return h_errno; }
++
++/* EGL_KHR_reusable_sync 家族（宿主 glvnd 无此扩展） */
++void* eglCreateSyncKHR(void* dpy, unsigned type, const int* attribs)
++{ (void)dpy; (void)type; (void)attribs; return 0; }
++int eglDestroySyncKHR(void* dpy, void* sync) { (void)dpy; (void)sync; return 1; }
++int eglWaitSyncKHR(void* dpy, void* sync, int flags) { (void)dpy; (void)sync; (void)flags; return 1; }
++int eglGetSyncAttribKHR(void* dpy, void* sync, int attrib, int* value)
++{ (void)dpy; (void)sync; (void)attrib; if (value) *value = 0; return 0; }
++void* eglCreateImageKHR(void* dpy, void* ctx, unsigned target, void* buffer, const int* attribs)
++{ (void)dpy; (void)ctx; (void)target; (void)buffer; (void)attribs; return 0; }
++int eglDestroyImageKHR(void* dpy, void* img) { (void)dpy; (void)img; return 1; }
++/* eglBeginFrame(void*, void*) —— Android 特有入口，用 asm 标签导出修饰名 */
++int eglSwapBuffersWithDamageKHR(void* dpy, void* surface, const int* rects, int n_rects)
++{ (void)dpy; (void)surface; (void)rects; (void)n_rects; return 1; }
++int eglSwapBuffers(void* dpy, void* surface) { (void)dpy; (void)surface; return 1; }
++int eglGetSwapIntervalEXT(void) { return 1; }
++
++/* android::setGLDebugLevel(int) —— libhwui 提供，这里兜底一份保证解析 */
++/* Android 专有 EGL 扩展（frame timing 等），宿主 glvnd 没有 */
++int eglPresentationTimeANDROID(void* dpy, void* surface, long long time)
++{ (void)dpy; (void)surface; (void)time; return 1; }
++int eglGetNextFrameIdANDROID(void* dpy, void* surface, unsigned* frameId)
++{ (void)dpy; (void)surface; if (frameId) *frameId = 0; return 1; }
++int eglGetCompositorTimingANDROID(void* dpy, void* surface, int numTimestamps, const int* timestamps, long long* values)
++{ (void)dpy; (void)surface; (void)numTimestamps; (void)timestamps; (void)values; return 1; }
++int eglGetCompositorTimingSupportedANDROID(void* dpy, void* surface, int timestamp)
++{ (void)dpy; (void)surface; (void)timestamp; return 0; }
++int eglGetFrameTimestampSupportedANDROID(void* dpy, void* surface, int timestamp)
++{ (void)dpy; (void)surface; (void)timestamp; return 0; }
++int eglGetFrameTimestampsANDROID(void* dpy, void* surface, unsigned frameId, int numTimestamps, const int* timestamps, long long* values)
++{ (void)dpy; (void)surface; (void)frameId; (void)numTimestamps; (void)timestamps; (void)values; return 1; }
++
++void egl_cache_set_filename_impl(void* self, const char* name)
++	__asm__("_ZN7android11egl_cache_t16setCacheFilenameEPKc");
++void egl_cache_set_filename_impl(void* self, const char* name) { (void)self; (void)name; }
++
++void setGLDebugLevel_impl(int level) __asm__("_ZN7android15setGLDebugLevelEi");
++void setGLDebugLevel_impl(int level) { (void)level; }
++
++void eglBeginFrame_impl(void* dpy, void* ctx) __asm__("_Z13eglBeginFramePvS_");
++void eglBeginFrame_impl(void* dpy, void* ctx) { (void)dpy; (void)ctx; }
++
++int eglDupNativeFenceFDANDROID(void* dpy, void* sync)
++{ (void)dpy; (void)sync; return -1; }
++
++const char* eglQueryStringImplementationANDROID_impl(void* dpy, int name)
++	__asm__("_Z35eglQueryStringImplementationANDROIDPvi");
++const char* eglQueryStringImplementationANDROID_impl(void* dpy, int name)
++{
++	(void)dpy; (void)name;
++	return "";
++}
++
++const char* egl_get_string_for_current_context_mangled(unsigned int name)
++	__asm__("_ZN7android34egl_get_string_for_current_contextEj");
++const char* egl_get_string_for_current_context_mangled(unsigned int name)
++{
++	(void)name;
++	return "";
++}
++
++const char* egl_get_string_for_current_context(unsigned int name)
++{
++	(void)name;
++	return "";
++}
++int __isfinite(double x) { return isfinite(x); }
++int __isfinitef(float x) { return isfinite(x); }
++int __isfinitel(long double x) { return isfinite(x); }
++int __isnan(double x) { return isnan(x); }
++int __isnanf(float x) { return isnan(x); }
++int __isnanl(long double x) { return isnan(x); }
++
++void __assert2(const char* file, int line, const char* func, const char* expr)
++{
++	fprintf(stderr, "%s:%d: %s: assertion \"%s\" failed\n", file, line, func ? func : "?", expr);
++	abort();
++}
++
++__attribute_const__ /* 兼容导出：bionic 库（如 libc++.so）按无前缀名引用 __errno */
++int *
++__errno(void)
++{
++	return __errno_location();
++}
++
++int *
+ bionic___errno(void)
+ {
+ 	return __errno_location();
+@@ -468,3 +618,265 @@ void bionic_freeaddrinfo(struct bionic_addrinfo *ai)
+ #ifdef VERBOSE_FUNCTIONS
+ #include "libc-verbose.h"
+ #endif
++
++
++/* ===== SDUNIFIED_ALLOC =====
++ * 统一 bionic 世界的分配器入口。
++ * 所有 bionic 库都把 libc.so 映射到本库，因此它们的 malloc/free 家族都会落到这里，
++ * 与 ART（glibc 侧）共用同一个 glibc 堆，避免"一边分配、另一边释放"的语义分裂。
++ * 内部一律走 glibc 的 __libc_*，避免自递归。 */
++extern void *__libc_malloc(size_t);
++extern void  __libc_free(void *);
++extern void *__libc_calloc(size_t, size_t);
++extern void *__libc_realloc(void *, size_t);
++extern void *__libc_memalign(size_t, size_t);
++
++/* ---- 分配追踪（SD_ALLOC_TRACE=1 开启）：在 bionic 世界的唯一入口处校验 ---- */
++#define SD_TAB_BITS 20
++#define SD_TAB_SIZE (1u << SD_TAB_BITS)
++static void *sd_tab[SD_TAB_SIZE];
++static int sd_trace_state = -1;
++static int sd_trace_on(void) {
++	if (sd_trace_state < 0) {
++		const char *e = getenv("SD_ALLOC_TRACE");
++		sd_trace_state = (e && *e == '1') ? 1 : 0;
++	}
++	return sd_trace_state;
++}
++static size_t sd_hash(void *p) {
++	uintptr_t x = (uintptr_t)p;
++	x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33;
++	return (size_t)(x & (SD_TAB_SIZE - 1));
++}
++static void sd_tab_add(void *p) {
++	if (!p) return;
++	size_t i = sd_hash(p);
++	for (size_t k = 0; k < 64; ++k) {
++		size_t j = (i + k) & (SD_TAB_SIZE - 1);
++		if (!sd_tab[j]) { sd_tab[j] = p; return; }
++	}
++}
++static int sd_tab_del(void *p) {
++	size_t i = sd_hash(p);
++	for (size_t k = 0; k < 64; ++k) {
++		size_t j = (i + k) & (SD_TAB_SIZE - 1);
++		if (sd_tab[j] == p) { sd_tab[j] = NULL; return 1; }
++		if (!sd_tab[j]) return 0;
++	}
++	return 0;
++}
++
++/* ---- 护栏页模式（SD_ALLOC_GUARD=1）：越界写立即 SIGSEGV ----
++ *
++ * 布局：mmap(data_pages + 1) ，最后一页 mprotect(PROT_NONE) 作护栏；
++ * 用户块紧贴护栏页前，尽量让块尾落在页边界上（不足 16 字节的对齐差额用 canary 覆盖）。
++ * 记帐全部放在链表里而不是块头，因此越界写碰不到任何簿记信息——
++ * 这一点很关键：旧实现把块头压在块尾，越界写会抹掉 magic，free 就退化成
++ * glibc 的 "free(): invalid pointer"，把 SIGSEGV 这条线索丢掉。
++ *
++ * canary：块尾到页尾之间填 0xAB，free 时校验；1..15 字节的越界由它兜住，
++ * >=16 字节的越界由护栏页当场 SIGSEGV。
++ */
++static int sd_guard_state = -1;
++static int sd_guard_on(void) {
++	if (sd_guard_state < 0) {
++		const char *e = getenv("SD_ALLOC_GUARD");
++		sd_guard_state = (e && *e == '1') ? 1 : 0;
++	}
++	return sd_guard_state;
++}
++
++#define SD_G_CANARY 0xAB
++#define SD_G_SLOTS  (1u << 18)          /* 26 万条，够 bootstrap 阶段用 */
++#define SD_G_MAXLIVE 200000
++typedef struct sd_grec {
++	void *user;
++	void *base;
++	size_t maplen;
++	size_t user_size;
++	size_t pad_end;                     /* user+size 到页尾的 canary 长度 */
++	struct sd_grec *next;
++} sd_grec_t;
++
++static sd_grec_t *sd_gtab[SD_G_SLOTS];
++static size_t sd_glive = 0;
++static int sd_gtab_failed = 0;
++
++static size_t sd_ghash(void *p) {
++	uintptr_t x = (uintptr_t)p;
++	x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 29;
++	return (size_t)(x & (SD_G_SLOTS - 1));
++}
++static void sd_g_insert(sd_grec_t *r) {
++	size_t i = sd_ghash(r->user);
++	r->next = sd_gtab[i];
++	sd_gtab[i] = r;
++	sd_glive++;
++}
++static sd_grec_t *sd_g_find(void *user) {
++	for (sd_grec_t *r = sd_gtab[sd_ghash(user)]; r; r = r->next)
++		if (r->user == user) return r;
++	return NULL;
++}
++static void sd_g_remove(sd_grec_t *r) {
++	sd_grec_t **pp = &sd_gtab[sd_ghash(r->user)];
++	while (*pp) { if (*pp == r) { *pp = r->next; sd_glive--; return; } pp = &(*pp)->next; }
++}
++
++static void sd_bt(const char *why, void *ptr) {
++	static int in_bt = 0;
++	(void)ptr;
++	write(2, why, strlen(why));
++	write(2, "\n", 1);
++	/* backtrace 自身会分配内存；重入时只打那一行，避免无限递归 */
++	if (!in_bt) {
++		void *bt[32];
++		in_bt = 1;
++		int k = backtrace(bt, 32);
++		backtrace_symbols_fd(bt, k, 2);
++		in_bt = 0;
++	}
++}
++
++static void *sd_g_alloc(size_t n, size_t align) {
++	if (sd_glive >= SD_G_MAXLIVE) return NULL;         /* 超出上限就退回普通 malloc */
++	if (align < 16) align = 16;
++	if (align & (align - 1)) align = 16;               /* 非 2 的幂：不接受 */
++	size_t need = n ? n : 1;
++	/* 多留一个 align 的余量，保证对齐后块尾仍能贴住页边界 */
++	size_t datapages = (need + align + PAGESIZE - 1) & ~(size_t)(PAGESIZE - 1);
++	size_t maplen = datapages + PAGESIZE;
++	char *base = mmap(NULL, maplen, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++	if (base == MAP_FAILED) return NULL;
++	if (mprotect(base + datapages, PAGESIZE, PROT_NONE) != 0) { munmap(base, maplen); return NULL; }
++	uintptr_t end = (uintptr_t)(base + datapages);
++	uintptr_t u = (end - need) & ~(uintptr_t)(align - 1);
++	if (u < (uintptr_t)(base + 16)) u = (uintptr_t)(base + 16);
++	size_t pad = (size_t)(end - (u + need));
++	if (pad) memset((void *)(u + need), SD_G_CANARY, pad);
++	sd_grec_t *r = (sd_grec_t *)__libc_malloc(sizeof(sd_grec_t));
++	if (!r) { munmap(base, maplen); return NULL; }
++	r->user = (void *)u; r->base = base; r->maplen = maplen;
++	r->user_size = need; r->pad_end = pad; r->next = NULL;
++	sd_g_insert(r);
++	return (void *)u;
++}
++
++/* 返回 1 表示这个指针是护栏块并且已经处理完 */
++static int sd_g_free(void *ptr) {
++	sd_grec_t *r = sd_g_find(ptr);
++	if (!r) return 0;
++	if (r->pad_end) {
++		unsigned char *c = (unsigned char *)r->user + r->user_size;
++		for (size_t i = 0; i < r->pad_end; ++i) {
++			if (c[i] != SD_G_CANARY) {
++				char msg[192];
++				snprintf(msg, sizeof(msg),
++					"SD_GUARD: heap overrun on %p (size=%zu, pad=%zu, first bad byte +%zu)",
++					r->user, r->user_size, r->pad_end, i);
++				sd_bt(msg, ptr);
++				break;
++			}
++		}
++	}
++	sd_g_remove(r);
++	munmap(r->base, r->maplen);
++	__libc_free(r);
++	return 1;
++}
++
++void *malloc(size_t size) {
++	if (sd_guard_on()) { void *g = sd_g_alloc(size, 16); if (g) return g; }
++	void *p = __libc_malloc(size);
++	if (sd_trace_on()) sd_tab_add(p);
++	return p;
++}
++void free(void *ptr) {
++	if (ptr && sd_guard_on() && sd_g_free(ptr)) return;
++	if (ptr && sd_guard_on() && !sd_gtab_failed) {
++		/* 护栏模式下释放了非护栏指针：要么来自 glibc（合法，交下去），
++		 * 要么是野指针/别名越界，这里报警以便定位。 */
++		char msg[160];
++		snprintf(msg, sizeof(msg), "SD_GUARD: free of NON-guard pointer %p", ptr);
++		sd_bt(msg, ptr);
++	}
++	if (ptr && sd_trace_on() && !sd_tab_del(ptr)) {
++		static const char msg[] = "SD_ALLOC_TRACE: free of untracked pointer\n";
++		write(2, msg, sizeof(msg) - 1);
++		static int in_bt = 0;
++		if (!in_bt) {
++			void *bt[24]; in_bt = 1;
++			int n = backtrace(bt, 24);
++			backtrace_symbols_fd(bt, n, 2);
++			in_bt = 0;
++		}
++	}
++	__libc_free(ptr);
++}
++void *calloc(size_t n, size_t size) {
++	size_t total = n * size;
++	if (sd_guard_on() && size && total / size == n) {
++		void *g = sd_g_alloc(total, 16);
++		if (g) return g;      /* mmap 出来的页天然是 0 */
++	}
++	void *p = __libc_calloc(n, size);
++	if (sd_trace_on()) sd_tab_add(p);
++	return p;
++}
++void *realloc(void *ptr, size_t size) {
++	if (sd_guard_on() && ptr) {
++		sd_grec_t *r = sd_g_find(ptr);
++		if (r) {
++			if (!size) { sd_g_free(ptr); return NULL; }
++			void *np = sd_g_alloc(size, 16);
++			if (!np) return NULL;
++			size_t copy = r->user_size < size ? r->user_size : size;
++			memcpy(np, ptr, copy);
++			sd_g_free(ptr);
++			return np;
++		}
++	}
++	if (ptr && sd_trace_on()) sd_tab_del(ptr);
++	void *p = __libc_realloc(ptr, size);
++	if (sd_trace_on()) sd_tab_add(p);
++	return p;
++}
++void *memalign(size_t align, size_t size) {
++	if (sd_guard_on()) { void *g = sd_g_alloc(size, align); if (g) return g; }
++	return __libc_memalign(align, size);
++}
++void *valloc(size_t size) {
++	if (sd_guard_on()) { void *g = sd_g_alloc(size, PAGESIZE); if (g) return g; }
++	return __libc_memalign(PAGESIZE, size);
++}
++
++int posix_memalign(void **memptr, size_t align, size_t size)
++{
++	if (sd_guard_on()) {
++		void *g = sd_g_alloc(size, align);
++		if (g) { *memptr = g; return 0; }
++	}
++	void *p = __libc_memalign(align, size);
++	if (!p) return 12; /* ENOMEM */
++	*memptr = p;
++	return 0;
++}
++
++void *aligned_alloc(size_t align, size_t size)
++{
++	if (sd_guard_on()) { void *g = sd_g_alloc(size, align); if (g) return g; }
++	return __libc_memalign(align, size);
++}
++
++size_t malloc_usable_size(void *ptr)
++{
++	if (ptr && sd_guard_on()) {
++		sd_grec_t *r = sd_g_find(ptr);
++		if (r) return r->user_size;
++	}
++	/* glibc 只导出 malloc_usable_size；用 dlsym 取真正的实现避免自引用 */
++	typedef size_t (*fn_t)(void *);
++	static fn_t real_fn;
++	if (!real_fn) real_fn = (fn_t)dlsym(RTLD_NEXT, "malloc_usable_size");
++	return real_fn ? real_fn(ptr) : 0;
++}
+diff --git a/libc/props.c b/libc/props.c
+new file mode 100644
+index 0000000..de502f4
+--- /dev/null
++++ b/libc/props.c
+@@ -0,0 +1,365 @@
++/* Android 系统属性存储。
++ *
++ * 原来这里是硬编码桩：ANDROID_ROOT 写死 /system、属性一律返回空串。
++ * 结果 android.os.Build 的静态初始化拿不到 ro.product.cpu.abilist 之类的值，
++ * getStringList() 返回 new String[0]，后续索引 [0] 直接
++ * ArrayIndexOutOfBoundsException，Resources 构造就崩了。
++ *
++ * 这里实现一个真的属性表：
++ *   1. 若设了 SD_BUILD_PROP，读那个文件；
++ *   2. 否则读 $ANDROID_ROOT/build.prop；
++ *   3. 剩下的关键项用内置默认值补齐（设备上没有 build.prop 时也能起来）。
++ *
++ * 同一份实现同时导出 __system_property_* 和 bionic___system_property_* 两套名字：
++ * bionic 链接器解析符号时优先找 "bionic_" 前缀版本，普通名字留给直接引用的人。
++ */
++#define _GNU_SOURCE
++#include <limits.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++
++#define SD_PROP_NAME_MAX  32
++#define SD_PROP_VALUE_MAX 92
++#define SD_PROP_BUCKETS   127
++
++/* 对外当句柄用，调用方只会把它再传回来，不会解引用内部布局 */
++struct prop_info {
++	const char *name;
++	const char *value;
++	unsigned serial;
++};
++
++struct sd_prop {
++	struct sd_prop *next;
++	struct prop_info info;
++	char name[SD_PROP_NAME_MAX];
++	char value[SD_PROP_VALUE_MAX];
++};
++
++static struct sd_prop *sd_props[SD_PROP_BUCKETS];
++static int sd_props_ready = 0;
++static unsigned sd_props_serial = 1;
++
++static unsigned sd_prop_hash(const char *s)
++{
++	unsigned h = 5381u;
++	while (*s) {
++		h = h * 33u + (unsigned char)*s++;
++	}
++	return h % SD_PROP_BUCKETS;
++}
++
++static struct sd_prop *sd_prop_entry(const char *name)
++{
++	struct sd_prop *p;
++	if (!name || !*name) {
++		return NULL;
++	}
++	for (p = sd_props[sd_prop_hash(name)]; p; p = p->next) {
++		if (!strcmp(p->name, name)) {
++			return p;
++		}
++	}
++	return NULL;
++}
++
++static int sd_prop_put(const char *name, const char *value)
++{
++	struct sd_prop *p;
++
++	if (!name || !*name || strlen(name) >= SD_PROP_NAME_MAX) {
++		return -1;
++	}
++	p = sd_prop_entry(name);
++	if (!p) {
++		p = calloc(1, sizeof(*p));
++		if (!p) {
++			return -1;
++		}
++		snprintf(p->name, sizeof(p->name), "%s", name);
++		p->info.name = p->name;
++		p->info.value = p->value;
++		unsigned h = sd_prop_hash(name);
++		p->next = sd_props[h];
++		sd_props[h] = p;
++	}
++	snprintf(p->value, sizeof(p->value), "%s", value ? value : "");
++	p->info.serial = sd_props_serial++;
++	return 0;
++}
++
++/* 只在不存在时写入：给内置默认值用，避免覆盖 build.prop 里的真值 */
++static void sd_prop_default(const char *name, const char *value)
++{
++	if (!sd_prop_entry(name)) {
++		sd_prop_put(name, value);
++	}
++}
++
++static void sd_prop_trim(char *s)
++{
++	size_t n;
++	while (*s == ' ' || *s == '\t') {
++		memmove(s, s + 1, strlen(s));
++	}
++	n = strlen(s);
++	while (n && (s[n - 1] == '\n' || s[n - 1] == '\r' ||
++	             s[n - 1] == ' ' || s[n - 1] == '\t')) {
++		s[--n] = 0;
++	}
++}
++
++static void sd_props_load_file(const char *path)
++{
++	FILE *f;
++	char line[512];
++
++	if (!path || !*path) {
++		return;
++	}
++	f = fopen(path, "r");
++	if (!f) {
++		return;
++	}
++	while (fgets(line, sizeof(line), f)) {
++		char *s = line;
++		char *eq;
++		while (*s == ' ' || *s == '\t') {
++			s++;
++		}
++		if (*s == '#' || *s == '=' || !*s || *s == '\n' || *s == '\r') {
++			continue;
++		}
++		eq = strchr(s, '=');
++		if (!eq) {
++			continue;
++		}
++		*eq = 0;
++		sd_prop_trim(s);
++		sd_prop_trim(eq + 1);
++		if (*s) {
++			sd_prop_put(s, eq + 1);
++		}
++	}
++	fclose(f);
++}
++
++static void sd_props_init(void)
++{
++	const char *file;
++	const char *root;
++	char path[PATH_MAX];
++
++	if (sd_props_ready) {
++		return;
++	}
++	sd_props_ready = 1;   /* 先置位，防止重入时无限递归 */
++
++	file = getenv("SD_BUILD_PROP");
++	if (file && *file) {
++		sd_props_load_file(file);
++	}
++	root = getenv("ANDROID_ROOT");
++	if (root && *root) {
++		snprintf(path, sizeof(path), "%s/build.prop", root);
++		sd_props_load_file(path);
++	}
++
++	/* 关键默认值：设备上通常没有 /system/build.prop，没有这些值框架层起不来 */
++	sd_prop_default("ro.build.version.sdk", "23");
++	sd_prop_default("ro.build.version.preview_sdk", "0");
++	sd_prop_default("ro.build.version.release", "6.0.1");
++	sd_prop_default("ro.build.version.codename", "REL");
++	sd_prop_default("ro.build.version.all_codenames", "REL");
++	sd_prop_default("ro.build.version.incremental", "0");
++	sd_prop_default("ro.build.version.security_patch", "2016-01-01");
++	sd_prop_default("ro.build.id", "MMB29M");
++	sd_prop_default("ro.build.type", "user");
++	sd_prop_default("ro.build.tags", "release-keys");
++	sd_prop_default("ro.build.user", "saidroid");
++	sd_prop_default("ro.build.host", "saidroid");
++	sd_prop_default("ro.build.product", "bonito");
++	sd_prop_default("ro.build.flavor", "full_bonito-user");
++	sd_prop_default("ro.build.date.utc", "1450000000");
++	sd_prop_default("ro.build.fingerprint",
++	                "google/bonito/bonito:6.0.1/MMB29M/0:user/release-keys");
++
++	sd_prop_default("ro.product.brand", "google");
++	sd_prop_default("ro.product.manufacturer", "Google");
++	sd_prop_default("ro.product.model", "Pixel 3a XL");
++	sd_prop_default("ro.product.name", "bonito");
++	sd_prop_default("ro.product.device", "bonito");
++	sd_prop_default("ro.product.board", "bonito");
++	sd_prop_default("ro.hardware", "bonito");
++	sd_prop_default("ro.board.platform", "sdm670");
++
++	/* 当前兼容层只支持 arm64，这里如实声明，不要虚报 32 位能力 */
++	sd_prop_default("ro.product.cpu.abi", "arm64-v8a");
++	sd_prop_default("ro.product.cpu.abi2", "");
++	sd_prop_default("ro.product.cpu.abilist", "arm64-v8a");
++	sd_prop_default("ro.product.cpu.abilist32", "");
++	sd_prop_default("ro.product.cpu.abilist64", "arm64-v8a");
++
++	sd_prop_default("ro.secure", "1");
++	sd_prop_default("ro.debuggable", "0");
++	sd_prop_default("ro.zygote", "zygote64");
++	sd_prop_default("ro.kernel.qemu", "0");
++	sd_prop_default("ro.sf.lcd_density", "420");
++	sd_prop_default("ro.opengles.version", "196610");
++	sd_prop_default("persist.sys.timezone", "UTC");
++	sd_prop_default("persist.sys.language", "zh");
++	sd_prop_default("persist.sys.country", "CN");
++	sd_prop_default("dalvik.vm.heapsize", "256m");
++	sd_prop_default("sys.boot_completed", "1");
++}
++
++/* ---------------- 对外接口 ---------------- */
++
++static int sd_prop_get(const char *name, char *value)
++{
++	struct sd_prop *p;
++
++	sd_props_init();
++	p = sd_prop_entry(name);
++	if (!p) {
++		if (value) {
++			*value = 0;
++		}
++		return 0;
++	}
++	if (value) {
++		memcpy(value, p->value, strlen(p->value) + 1);
++	}
++	return (int)strlen(p->value);
++}
++
++static const struct prop_info *sd_prop_find(const char *name)
++{
++	struct sd_prop *p;
++	sd_props_init();
++	p = sd_prop_entry(name);
++	return p ? &p->info : NULL;
++}
++
++static int sd_prop_read(const struct prop_info *pi, char *name, char *value)
++{
++	if (!pi) {
++		if (name) *name = 0;
++		if (value) *value = 0;
++		return 0;
++	}
++	if (name && pi->name) {
++		memcpy(name, pi->name, strlen(pi->name) + 1);
++	}
++	if (value && pi->value) {
++		memcpy(value, pi->value, strlen(pi->value) + 1);
++		return (int)strlen(pi->value);
++	}
++	return 0;
++}
++
++static int sd_prop_foreach(void (*fn)(const struct prop_info *, void *), void *cookie)
++{
++	int b;
++	sd_props_init();
++	if (!fn) {
++		return 0;
++	}
++	for (b = 0; b < SD_PROP_BUCKETS; ++b) {
++		struct sd_prop *p = sd_props[b];
++		while (p) {
++			struct sd_prop *next = p->next;
++			fn(&p->info, cookie);
++			p = next;
++		}
++	}
++	return 0;
++}
++
++static unsigned sd_prop_serial(const struct prop_info *pi)
++{
++	return pi ? pi->serial : 0;
++}
++
++static int sd_prop_set(const char *name, const char *value)
++{
++	sd_props_init();
++	return sd_prop_put(name, value) == 0 ? 0 : -1;
++}
++
++int __system_property_get(const char *name, char *value) { return sd_prop_get(name, value); }
++int bionic___system_property_get(const char *name, char *value) { return sd_prop_get(name, value); }
++
++const struct prop_info *__system_property_find(const char *name) { return sd_prop_find(name); }
++const struct prop_info *bionic___system_property_find(const char *name) { return sd_prop_find(name); }
++
++int __system_property_read(const struct prop_info *pi, char *name, char *value)
++{ return sd_prop_read(pi, name, value); }
++int bionic___system_property_read(const struct prop_info *pi, char *name, char *value)
++{ return sd_prop_read(pi, name, value); }
++
++int __system_property_foreach(void (*fn)(const struct prop_info *, void *), void *cookie)
++{ return sd_prop_foreach(fn, cookie); }
++int bionic___system_property_foreach(void (*fn)(const struct prop_info *, void *), void *cookie)
++{ return sd_prop_foreach(fn, cookie); }
++
++unsigned __system_property_serial(const struct prop_info *pi) { return sd_prop_serial(pi); }
++unsigned bionic___system_property_serial(const struct prop_info *pi) { return sd_prop_serial(pi); }
++
++unsigned __system_property_area_serial(void) { return sd_props_serial; }
++unsigned bionic___system_property_area_serial(void) { return sd_props_serial; }
++
++int __system_property_set(const char *name, const char *value) { return sd_prop_set(name, value); }
++int bionic___system_property_set(const char *name, const char *value) { return sd_prop_set(name, value); }
++
++int __system_property_add(const char *name, unsigned namelen, const char *value, unsigned vallen)
++{
++	char n[SD_PROP_NAME_MAX];
++	char v[SD_PROP_VALUE_MAX];
++	unsigned nc = namelen < sizeof(n) - 1 ? namelen : (unsigned)sizeof(n) - 1;
++	unsigned vc = vallen < sizeof(v) - 1 ? vallen : (unsigned)sizeof(v) - 1;
++	if (!name) {
++		return -1;
++	}
++	memcpy(n, name, nc);
++	n[nc] = 0;
++	if (value) {
++		memcpy(v, value, vc);
++	}
++	v[vc] = 0;
++	return sd_prop_set(n, value ? v : "");
++}
++int bionic___system_property_add(const char *name, unsigned namelen, const char *value, unsigned vallen)
++{ return __system_property_add(name, namelen, value, vallen); }
++
++int __system_property_update(struct prop_info *pi, const char *value, unsigned len)
++{
++	char v[SD_PROP_VALUE_MAX];
++	unsigned c = len < sizeof(v) - 1 ? len : (unsigned)sizeof(v) - 1;
++	if (!pi || !pi->name) {
++		return -1;
++	}
++	if (value) {
++		memcpy(v, value, c);
++	}
++	v[c] = 0;
++	return sd_prop_set(pi->name, value ? v : "");
++}
++int bionic___system_property_update(struct prop_info *pi, const char *value, unsigned len)
++{ return __system_property_update(pi, value, len); }
++
++int __system_property_wait(const struct prop_info *pi, unsigned old_serial,
++                           unsigned *new_serial, const struct timespec *timeout)
++{
++	(void)timeout;
++	sd_props_init();
++	if (new_serial) {
++		*new_serial = pi ? pi->serial : sd_props_serial;
++	}
++	return (pi && pi->serial != old_serial) ? 1 : 0;
++}
++int bionic___system_property_wait(const struct prop_info *pi, unsigned old_serial,
++                                  unsigned *new_serial, const struct timespec *timeout)
++{ return __system_property_wait(pi, old_serial, new_serial, timeout); }
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+index bdbdef0..3e9ad59 100644
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -86,6 +86,15 @@ void *bionic_dlopen(const char *filename, int flag)
+ 	return ret;
+ }
+ 
++extern int dl_append_library_path(const char *path);
++int bionic_add_library_path(const char *path)
++{
++	pthread_mutex_lock(&apkenv_dl_lock);
++	int result = dl_append_library_path(path);
++	pthread_mutex_unlock(&apkenv_dl_lock);
++	return result;
++}
++
+ struct android_dlextinfo {
+ 	uint64_t flags;
+ 	void*   reserved_addr;
+@@ -134,6 +143,9 @@ void *bionic_dlsym(void *handle, const char *symbol)
+ 
+ 	char wrap_sym_name[1024] = {'b', 'i', 'o', 'n', 'i', 'c', '_'};
+ 	memcpy(wrap_sym_name + 7, symbol, MIN(sizeof(wrap_sym_name) - 7, strlen(symbol)));
++	/* Match relocation lookup without interposing libhybris's DATA symbol. */
++	if (!strcmp(symbol, "__system_properties_init"))
++		strcpy(wrap_sym_name, "saildroid_bionic___system_properties_init");
+ 
+ 	/* technically for RTLD_NEXT / RTLD_DEFAULT we don't know, but it will be dealt with later */
+ 	bool is_this_our_handle = (handle == RTLD_NEXT || handle == RTLD_DEFAULT);
+@@ -363,6 +375,10 @@ __attribute__((constructor)) void construct(void)
+ 	memcpy(apkenv_libdl_symtab, symtab, sizeof(symtab));
+ 
+ 	// the config files contain overrides like libc.so -> libc_bio.so.0
++	const char *private_config = getenv("BIONIC_TRANSLATION_CONFIG_DIR");
++	if (private_config && private_config[0] == '/') {
++		read_cfg_dir(&lib_override_map, (char *)private_config);
++	} else {
+ 	const char *xdg_data_dirs = getenv("XDG_DATA_DIRS") ?: "/usr/local/share:/usr/share";
+ 	char *cfg_path = malloc(strlen(xdg_data_dirs) + sizeof("/bionic_translation/cfg.d"));
+ 	while (*xdg_data_dirs) {
+@@ -375,6 +391,7 @@ __attribute__((constructor)) void construct(void)
+ 	}
+ 	free(cfg_path);
+ 	read_cfg_dir(&lib_override_map, "/etc/bionic_translation/cfg.d");
++	}
+ 
+ 
+ 	// since it seems to not be particularly trivial to figure out which
+diff --git a/linker/linker.c b/linker/linker.c
+index 7824cc1..b03c9c6 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -80,11 +80,14 @@
+ #include "linker_sleb128.h"
+ 
+ #define ALLOW_SYMBOLS_FROM_MAIN 1
+-#define SO_MAX 128
++/* Android 10's framework dependency closure already approaches the old 128
++ * slots before an application's own libraries load. Keep a bounded pool for
++ * the pool-indexed symbol traversal, with room for modern multi-library APKs. */
++#define SO_MAX 1024
+ 
+ /* Assume average path length of 64 and max 8 paths */
+-#define LDPATH_BUFSIZE	  512
+-#define LDPATH_MAX	  8
++#define LDPATH_BUFSIZE	  16384
++#define LDPATH_MAX	  64
+ 
+ #define LDPRELOAD_BUFSIZE 512
+ #define LDPRELOAD_MAX	  8
+@@ -261,6 +264,14 @@ static void apkenv_remove_soinfo_from_debug_map(soinfo *info)
+ void apkenv_notify_gdb_of_libraries(void);
+ 
+ static void apkenv_notify_gdb_of_load(soinfo *info)
++{
++	/* 修复：_r_debug 的 link_map 维护在 glibc 宿主上会写坏地址（实测 SIGSEGV），
++	 * 该通知只用于调试器枚举已加载库，这里直接跳过。*/
++	(void)info;
++	return;
++}
++
++static void apkenv_notify_gdb_of_load_unused(soinfo *info)
+ {
+ 	if (info->flags & FLAG_EXE) {
+ 		// GDB already knows about the main executable
+@@ -861,6 +872,12 @@ static int apkenv_open_library(const char *name, char *fullpath)
+ 
+ 	strcpy(fullpath, name);
+ 
++	/* 注意：这里曾经试过「绝对路径直接 open」，结果在 ART 注册 native 时
++	 * 触发 std::bad_function_call（bad_function_call 来自 C++ std::function 空调用），
++	 * 具体机理没查清，先不这么干。
++	 * 正确做法是让调用方把库目录用 dl_parse_library_path 注册进来——
++	 * 那样下面的 fnmatch 分支会命中并直接 open，语义一致且没有副作用。
++	 * （sdbridge 已提供 addBionicLibraryPath 供 Java 侧调用。） */
+ 	tmp_name = strdup(name);
+ 	path_normalized_name = realpath(dirname(tmp_name), NULL);
+ 	free(tmp_name);
+@@ -1057,13 +1074,19 @@ apkenv_get_lib_extents(int fd, const char *name, void *__hdr, size_t *total_sz)
+ 		return (intptr_t)-1;
+ 	}
+ 
++	DL_ERR("DBG_EXTENTS name=%s min=0x%lx max=0x%lx PAGE_SIZE=0x%lx PAGE_MASK=0x%lx",
++	       name, (unsigned long)min_vaddr, (unsigned long)max_vaddr,
++	       (unsigned long)PAGE_SIZE, (unsigned long)PAGE_MASK);
+ 	/* truncate min_vaddr down to page boundary */
+ 	min_vaddr &= ~PAGE_MASK;
+ 
+ 	/* round max_vaddr up to the next page */
+ 	max_vaddr = (max_vaddr + PAGE_SIZE - 1) & ~PAGE_MASK;
+ 
+-	*total_sz = (max_vaddr - min_vaddr);
++	/* 修复：段是按 base + floor(p_vaddr) 映射的（见 apkenv_load_segments），
++	 * 因此预留区域必须覆盖到 max_vaddr，而不是 max_vaddr - min_vaddr，
++	 * 否则非零 min_vaddr 的大库（如 libandroid_runtime.so）会被少算。*/
++	*total_sz = (size_t)max_vaddr;
+ 	return (intptr_t)req_base;
+ }
+ 
+@@ -1155,8 +1178,19 @@ err:
+ static int
+ apkenv_load_segments(int fd, void *header, soinfo *si)
+ {
+-	ElfW(Ehdr) *ehdr = (ElfW(Ehdr) *)header;
+-	ElfW(Phdr) *phdr = (ElfW(Phdr) *)((unsigned char *)header + ehdr->e_phoff);
++	/* 修复：库段会用 MAP_FIXED 映射到可能覆盖调用方堆缓冲区的地址范围，
++	 * 头与 phdr 必须先复制到栈上，否则映射完成后解析全成垃圾。 */
++	static ElfW(Phdr) phdr_copy[64];
++	ElfW(Ehdr) ehdr_copy = *(ElfW(Ehdr) *)header;
++	{
++		ElfW(Phdr) *src = (ElfW(Phdr) *)((unsigned char *)header + ehdr_copy.e_phoff);
++		int ncopy = ehdr_copy.e_phnum;
++		if (ncopy > 64) ncopy = 64;
++		memcpy(phdr_copy, src, (size_t)ncopy * sizeof(ElfW(Phdr)));
++		ehdr_copy.e_phnum = ncopy;
++	}
++	ElfW(Ehdr) *ehdr = &ehdr_copy;
++	ElfW(Phdr) *phdr = phdr_copy;
+ 	ElfW(Addr) base = (ElfW(Addr))si->base;
+ 	int cnt;
+ 	size_t len;
+@@ -1477,9 +1511,23 @@ apkenv_load_library(const char *name, const bool try_glibc, int glibc_flag, void
+ 
+ 	/* this might not be right. Technically, we don't even need this info
+ 	 * once we go through 'apkenv_load_segments'. */
+-	hdr = (ElfW(Ehdr) *)si->base;
+-	si->phdr = (ElfW(Phdr) *)((unsigned char *)si->base + hdr->e_phoff);
+-	si->phnum = hdr->e_phnum;
++	/* 修复：ELF 头位于文件 offset 0，但当首个 PT_LOAD 的 p_vaddr != 0 时，
++	 * 它并不映射在 si->base。这里用已读入的 header 缓冲区解析，并按首个
++	 * PT_LOAD 的 (p_vaddr - p_offset) 换算 phdr 的运行时地址。*/
++	{
++		ElfW(Ehdr) *file_ehdr = (ElfW(Ehdr) *)bytes;
++		ElfW(Phdr) *file_phdr = (ElfW(Phdr) *)((unsigned char *)bytes + file_ehdr->e_phoff);
++		ElfW(Addr) map_bias = 0;
++		int k;
++		for (k = 0; k < file_ehdr->e_phnum; ++k) {
++			if (file_phdr[k].p_type == PT_LOAD) {
++				map_bias = file_phdr[k].p_vaddr - file_phdr[k].p_offset;
++				break;
++			}
++		}
++		si->phdr = (ElfW(Phdr) *)((unsigned char *)si->base + map_bias + file_ehdr->e_phoff);
++		si->phnum = file_ehdr->e_phnum;
++	}
+ 	/**/
+ 
+ 	close(fd);
+@@ -1514,6 +1562,16 @@ apkenv_init_library(soinfo *si)
+ 
+ extern struct override_map lib_override_map;
+ 
++static const char *apkenv_soname(const soinfo *si)
++{
++	if (!si->strtab || !si->dynamic)
++		return NULL;
++	for (const ElfW(Dyn) *d = si->dynamic; d->d_tag != DT_NULL; ++d)
++		if (d->d_tag == DT_SONAME)
++			return si->strtab + d->d_un.d_val;
++	return NULL;
++}
++
+ soinfo *apkenv_find_library(const char *name, const bool try_glibc, int glibc_flag, void **glibc_handle)
+ {
+ 	soinfo *si;
+@@ -1549,7 +1607,11 @@ soinfo *apkenv_find_library(const char *name, const bool try_glibc, int glibc_fl
+ 	bname = bname ? bname + 1 : name;
+ 
+ 	for (si = apkenv_solist; si != 0; si = si->next) {
+-		if (!strcmp(bname, si->name)) {
++		const char *soname = strchr(name, '/') ? NULL : apkenv_soname(si);
++		/* DT_NEEDED names refer to DT_SONAME, which may differ from the
++		 * filename used by a preceding explicit dlopen (e.g. libkernel.so
++		 * provides libwrapper.so in QQ). Reuse that exact loaded object. */
++		if (!strcmp(bname, si->name) || (soname && !strcmp(name, soname))) {
+ 			if (si->flags & FLAG_ERROR) {
+ 				DL_ERR("%5d '%s' failed to load previously", apkenv_pid, bname);
+ 				return NULL;
+@@ -1819,6 +1881,10 @@ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
+ 			sym_name = (const char *)(si->strtab + si->symtab[sym].st_name);
+ 
+ 			memcpy(wrap_sym_name + 7, sym_name, MIN(sizeof(wrap_sym_name) - 7, strlen(sym_name)));
++			/* libhybris exports a function-pointer VARIABLE under the usual
++			 * bionic_ name. Keep our callable property initializer separate. */
++			if (!strcmp(sym_name, "__system_properties_init"))
++				strcpy(wrap_sym_name, "saildroid_bionic___system_properties_init");
+ 			sym_addr = 0;
+ 
+ 			if ((sym_addr = (uintptr_t)dlsym(RTLD_DEFAULT, wrap_sym_name))) {
+@@ -1872,6 +1938,7 @@ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
+ 				// We only allow an undefined symbol if this is a weak reference...
+ 				s = &si->symtab[sym];
+ 				if (ELF_ST_BIND(s->st_info) != STB_WEAK) {
++					fprintf(stderr, "SAILDROID_LINK_UNRESOLVED|library=%s|symbol=%s\n", si->name, sym_name);
+ 					DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+ 					if(getenv("LINKER_PRINT_MISSING_SYMBOLS_AND_DIE")) {
+ 						die_because_of_missing_symbols = true;
+@@ -2268,11 +2335,14 @@ static inline bool apkenv_apply_packed_relocs(soinfo *si, const uint8_t* packed_
+ #endif
+ 			// FIXME: clean up apkenv_reloc_library so we don't need to do this
+ 			// (this function expects an array, and will probably be extra slow like this)
++			/* 每个重定位都打一行会淹没日志（一个库几万行），只在开调试等级时才打 */
++			if (unlikely(apkenv_debug_verbosity > 0)) {
+ #if defined(USE_RELA)
+-			fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx, .r_addend = 0x%lx}\n", reloc.r_offset, reloc.r_info, reloc.r_addend);
++				fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx, .r_addend = 0x%lx}\n", reloc.r_offset, reloc.r_info, reloc.r_addend);
+ #else
+-			fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx}\n", reloc.r_offset, reloc.r_info);
++				fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx}\n", reloc.r_offset, reloc.r_info);
+ #endif
++			}
+ 			ret = apkenv_reloc_library(si, &reloc, 1);
+ 			if (unlikely(ret))
+ 				return false;
+@@ -2953,3 +3023,35 @@ void dl_parse_library_path(const char *path, char *delim)
+ 		apkenv_ldpaths[i] = NULL;
+ 	}
+ }
++
++/* Called under the recursive dl lock. Build first, so limits never leave a
++ * partially replaced search path while another app thread loads a dependency. */
++int dl_append_library_path(const char *path)
++{
++	char merged[LDPATH_BUFSIZE] = {0};
++	const char *entries[LDPATH_MAX];
++	char *incoming = strdup(path ? path : "");
++	if (!incoming) return -1;
++	size_t length = 0;
++	int count = 0;
++	for (int i = 0; apkenv_ldpaths[i] && count < LDPATH_MAX; i++) {
++		entries[count++] = apkenv_ldpaths[i];
++	}
++	char *save = NULL;
++	for (char *entry = strtok_r(incoming, ":", &save); entry; entry = strtok_r(NULL, ":", &save)) {
++		int duplicate = 0;
++		for (int i = 0; i < count; i++) if (!strcmp(entries[i], entry)) { duplicate = 1; break; }
++		if (duplicate) continue;
++		if (count == LDPATH_MAX) { free(incoming); errno = ENAMETOOLONG; return -1; }
++		entries[count++] = entry;
++	}
++	for (int i = 0; i < count; i++) {
++		size_t size = strlen(entries[i]);
++		if (length + size + (length ? 1 : 0) >= sizeof(merged)) { free(incoming); errno = ENAMETOOLONG; return -1; }
++		if (length) merged[length++] = ':';
++		memcpy(merged + length, entries[i], size); length += size;
++	}
++	dl_parse_library_path(merged, ":");
++	free(incoming);
++	return 0;
++}
+diff --git a/meson.build b/meson.build
+index d741726..16b9129 100644
+--- a/meson.build
++++ b/meson.build
+@@ -119,11 +119,14 @@ c_bio = shared_library('c_bio',
+ 		'libc/libc-stdio.c',
+ 		'libc/libc-sha1.c',
+ 		'libc/libc-open-overrides.c',
++		'libc/props.c',
+ 	],
+ 	soversion: 0, # we're shimming a stable ABI; this should never need to change
+ 	install: true,
+ 	dependencies: [
+-		dependency('libbsd'),
++		# libbsd 提供 strlcpy/arc4random 之类，但链接时因为 --no-as-needed 被整个拉进来，
++		# 结果 libc_bio 白白 NEEDED 一个设备上不存在的 libbsd.so.0，glibc 直接 dlopen 失败。
++		# glibc 2.38+ 已自带 strlcpy/strlcat，剩下的这里也没用到，索性去掉这个依赖。
+ 		dependency('libunwind'), # see comments on https://reviews.llvm.org/D78787; for 32bit arm we may need more fun
+ 		libm_dep, # TODO: have separate libm_bio? (note: on musl this is a noop)
+ 	],

@@ -1,0 +1,15 @@
+[submodule "third_party/art-standalone"]
+	path = third_party/art-standalone
+	url = https://gitlab.com/android_translation_layer/art_standalone.git
+
+[submodule "third_party/bionic_translation"]
+	path = third_party/bionic_translation
+	url = https://gitlab.com/android_translation_layer/bionic_translation.git
+
+[submodule "third_party/vixl"]
+	path = third_party/vixl
+	url = https://github.com/Linaro/vixl.git
+
+[submodule "third_party/vixl-aosp"]
+	path = third_party/vixl-aosp
+	url = https://android.googlesource.com/platform/external/vixl

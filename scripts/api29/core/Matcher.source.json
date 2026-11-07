@@ -1,0 +1,10 @@
+{
+  "base": "third_party/art-standalone/libcore/ojluni/src/main/java/java/util/regex/Matcher.java",
+  "base_sha256": "67ed4c6f5809b079f539e74ad0a8b87258a9168f539a76e9990d0fa3fe1ba730",
+  "matching_platform": {
+    "url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/util/regex/Matcher.java?format=TEXT",
+    "sha256": "5c6a94862435886be889f6beefe5e3786918ebe7b67183d041a6402be94f63dd"
+  },
+  "sha256": "3797fa5a6f016a70103564161500dba1c341778b61f287e9662301dc7564d458",
+  "adaptation": "Retain existing private JNI and class layout; Android10 public group validation/null replacement semantics"
+}

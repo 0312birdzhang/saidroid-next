@@ -1,0 +1,20 @@
+{
+  "files": {
+    "java/text/DateFormatSymbols.java": {
+      "sha256": "91717affb879aa13e984ba31beb99ad0c4c20c72a31acb44391f10e560cc1074",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/text/DateFormatSymbols.java",
+      "baseline_sha256": "7c2b0cd538ca693a23f0ac6791baac010ff9292d6962251968b9af5d85a42c9c",
+      "upstream_sha256": "6544eab346480b42a134563b986912b0f1c7296c6f052c3caa9ec0c07d476237",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/text/DateFormatSymbols.java?format=TEXT",
+      "scope": "Add exact original Android10 b/B inventory and package constants only"
+    },
+    "java/text/SimpleDateFormat.java": {
+      "sha256": "0e10f1c00adff2f62a72115bd497d33dcba0b976e1eaf32652a23bb702b4f869",
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/text/SimpleDateFormat.java",
+      "baseline_sha256": "77de1a4dabcd6d87068965a363a10c1e04eac39e4538ad5f17a44afc63326420",
+      "upstream_sha256": "c747a46d10ec5154cbc08033c6e0487e2feb7122a57a28c534d8de145c4bec55",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/text/SimpleDateFormat.java?format=TEXT",
+      "scope": "Original Android10 SimpleDateFormat including b/B unsupported-format/parse behavior, context months, real timezone names and whitespace-year parsing; one compile adaptation replaces inaccessible legacy Calendar helper with identical standalone-style bit; all public/protected/native declarations must remain"
+    }
+  }
+}

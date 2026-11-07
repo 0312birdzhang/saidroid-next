@@ -1,0 +1,15 @@
+{
+  "scope": "Restore only the existing target-SDK check in the deprecated loadLibrary(String,ClassLoader) overload; native loading, all other methods and existing guard implementation unchanged",
+  "files": {
+    "java/lang/Runtime.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/lang/Runtime.java",
+      "baseline_sha256": "c89a29fa924bdb1fd0f19dd945644b733c607e1d948f2bca7cd567fca609f1bb",
+      "upstream_source": "aosp-extra/Runtime-api29-190.java",
+      "upstream_sha256": "aefa7806bad7a13b2e56e3ceadf741e8b59ce76fe33909ffaf8d72651d614e43",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/lang/Runtime.java?format=TEXT",
+      "sha256": "69b74b60c172f2beae9e4f07612c730162aa060396efc1535af11538e54d48b3",
+      "changed_line_before": "        //checkTargetSdkVersionForLoad(\"java.lang.Runtime#loadLibrary(String, ClassLoader)\");",
+      "changed_line_after": "        checkTargetSdkVersionForLoad(\"java.lang.Runtime#loadLibrary(String, ClassLoader)\");"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "source": "https://github.com/WebKit/WebKit/blob/webkitgtk-2.50.0/Source/WebKit/UIProcess/API/glib/WebKitInputMethodContext.h.in",
+  "sha256": "8f1a8d78b5a294bf7846855d2f20200cca519425f457f9bcc32b154b53b8be32",
+  "license": "LGPL-2.0-or-later",
+  "usage": "webkit-ime.h declares only the public virtual-function prefix; allocation sizes are queried from the runtime GType. Purpose values and byte-offset-to-UTF16 conversion checked against this header."
+}

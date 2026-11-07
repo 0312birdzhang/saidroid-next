@@ -1,0 +1,14 @@
+{
+  "schema": "saildroid-core-source-overlay-v1",
+  "files": {
+    "java/io/ObjectStreamClass.java": {
+      "baseline_source": "third_party/art-standalone/libcore/ojluni/src/main/java/java/io/ObjectStreamClass.java",
+      "baseline_sha256": "5b64a1c20a8526b5f98323de6b8f4241fa6ecb80543c198bfaf822dbca5d12dd",
+      "sha256": "3cb8c9de4a3d00ac84479ed95bf586b7ff2f77f25e7bc7835f0e3bdee220a638",
+      "upstream_source": "build/evidence/cts-frame-repair-20261031/aosp-extra/ObjectStreamClass-api29.java",
+      "upstream_sha256": "638aa56a185a2c34f817cbb053bfc9dd788b9e6d8706bd749a5795c25e668f68",
+      "upstream_url": "https://android.googlesource.com/platform/libcore/+/android-10.0.0_r16/ojluni/src/main/java/java/io/ObjectStreamClass.java?format=TEXT",
+      "scope": "Exact Android10 computeDefaultSUID implementation and real listener API/default warning; two native boolean argument inversions preserve actual unchanged checkSuperclass JNI ABI, measured before draft; all other source unchanged"
+    }
+  }
+}
