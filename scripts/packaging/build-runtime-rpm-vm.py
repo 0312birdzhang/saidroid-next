@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build an inert, version-isolated development RPM and verify every extracted byte.
+"""Build a version-isolated development RPM and verify every extracted byte.
 
 This packages an explicitly supplied, hash-pinned snapshot. It neither certifies
-runtime closure nor activates/installs the result. Run only in the build VM.
+runtime closure nor installs the result. Activation policy comes from the sealed
+runtime configuration. Run only in the build VM.
 """
 from pathlib import Path, PurePosixPath
-import argparse, hashlib, json, os, re, shutil, stat, subprocess
+import argparse, hashlib, json, os, re, runpy, shutil, stat, subprocess
 
 
 def digest(path):
@@ -58,7 +59,8 @@ if '-' in a.version or '-' in a.rpm_release:
 if a.output.exists():
     raise ValueError('Output already exists')
 root = a.root.resolve()
-api = json.loads((root / 'runtime.json').read_text())['api']
+runtime = json.loads((root / 'runtime.json').read_text())
+api = runtime['api']
 assert api in (28, 29), 'Unsupported Android API'
 assert digest(a.manifest) == a.manifest_sha256, 'Snapshot manifest hash mismatch'
 expected = json.loads(a.manifest.read_text())
@@ -111,9 +113,12 @@ for name in ('SPECS', 'SOURCES', 'BUILD', 'BUILDROOT', 'RPMS', 'SRPMS'):
     (top / name).mkdir(parents=True)
 installed = '/opt/saildroid/releases/' + a.release_id
 name = 'saildroid-runtime-' + a.release_id
-# No installation scriptlets: in particular no update-alternatives, symlink
-# switch, systemd action, user creation, ownership change of existing appdata,
-# or automatic cache compilation. File capability is RPM metadata only.
+setup = runpy.run_path(str(root / 'bin/saildroid-setup')) if 'bin/saildroid-setup' in expected['files'] else None
+auto_activate = False
+if runtime.get('rpm_activation') is not None:
+    assert setup and 'rpm_activation_enabled' in setup, 'Activation policy requires an updated setup helper'
+    auto_activate = setup['rpm_activation_enabled'](runtime, a.release_id)
+scripts_expected = setup['rpm_install_scripts'](a.release_id) if auto_activate else {}
 lines = [
     '%global __os_install_post %{nil}', '%global debug_package %{nil}',
     '%global _build_id_links none', '%global _binary_payload w9.gzdio',
@@ -123,8 +128,8 @@ lines = [
     'BuildArch: aarch64', 'AutoReqProv: no',
     *['Requires: ' + r for r in sorted(requirements)],
     '', '%description',
-    'Explicit development snapshot. Installation only adds a private versioned',
-    'runtime directory. Activation and acceptance testing are separate actions.',
+    'Explicit development snapshot in a private versioned runtime directory.',
+    'The packaged activation policy determines installation-time activation.',
     '', '%prep', '%build', '%install',
     'mkdir -p "%{buildroot}' + installed + '"',
     "cp -a '" + str(root) + "/.' \"%{buildroot}" + installed + '/"',
@@ -140,6 +145,8 @@ for relative, value in expected['files'].items():
     lines.append(capability + '%%attr(%04o,root,root) ' % value['mode'] + installed + '/' + relative)
 for relative in expected['symlinks']:
     lines.append(installed + '/' + relative)
+for script_name, body in scripts_expected.items():
+    lines.extend(['', '%pre' if script_name == 'preinstall' else '%posttrans', body])
 spec = top / 'SPECS' / (name + '.spec')
 spec.write_text('\n'.join(lines) + '\n')
 command = ['rpmbuild', '-bb', '--define', '_topdir ' + str(top), str(spec)]
@@ -152,7 +159,10 @@ query = lambda *args: subprocess.check_output(['rpm', '-qp', *args, str(rpm)], t
 identity = query('--qf', '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}')
 assert identity == name + '-' + a.version + '-' + a.rpm_release + '.aarch64'
 scripts = query('--scripts')
-assert not scripts.strip(), 'Unexpected installation scriptlets'
+if setup and 'check_rpm_scripts' in setup:
+    setup['check_rpm_scripts'](runtime, a.release_id, scripts)
+else:
+    assert not scripts.strip(), 'Unexpected installation scriptlets'
 capabilities = query('--qf', '[%{FILENAMES} %{FILECAPS}\n]')
 cap_lines = [line for line in capabilities.splitlines() if 'cap_' in line]
 assert cap_lines == [installed + '/libexec/saildroid-app cap_sys_resource=ep']
@@ -181,7 +191,7 @@ result = dict(passed=True, rpm=str(rpm), nevra=identity, sha256=digest(rpm), siz
               requirements=sorted(requirements), host_elf_count=len(host_elf),
               capabilities=cap_lines, scriptlets=scripts, extracted_manifest_matches=True,
               target_installed=False, target_tested=False, closure_certified=False,
-              automatic_activation=False, app_caches_included=False,
+              automatic_activation=auto_activate, app_caches_included=False,
               system_apks=sorted(allowed_apks))
 (a.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
 print(json.dumps(result, indent=2))
