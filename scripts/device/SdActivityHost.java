@@ -9,6 +9,8 @@ import java.util.*;
 
 /** Real API 29 ActivityThread lifecycle, hosted asynchronously behind Wayland. */
 public final class SdActivityHost {
+    // Process-local endpoint for PackageManager.buildRequestPermissionsIntent.
+    static final String PERMISSION_CONTROLLER_PACKAGE="org.saildroid.permissioncontroller";
     private static final ArrayList<Entry> stack=new ArrayList<Entry>();
     private static boolean hostVisible=true;
     private static int ident;
@@ -204,10 +206,41 @@ public final class SdActivityHost {
         requestStart(intent,null,null,-1);
     }
     public static void requestStart(final Intent intent,final IBinder resultTo,final String resultWho,final int requestCode){
+        if(PackageManager.ACTION_REQUEST_PERMISSIONS.equals(intent.getAction())
+                &&PERMISSION_CONTROLLER_PACKAGE.equals(intent.getPackage())){
+            requestPermissions(intent,resultTo,resultWho,requestCode);return;
+        }
         if(SdApkPackage.resolveActivities(intent,intent.getType(),0).isEmpty())throw new ActivityNotFoundException(intent.toString());
         if(requestCode>=0)find(resultTo);
         final Intent snapshot=new Intent(intent);
         post(new Runnable(){public void run(){try{launch(snapshot,resultTo,resultWho,requestCode);}catch(Exception e){throw new IllegalStateException("Activity launch failed",e);}}});
+    }
+    private static void requestPermissions(Intent intent,final IBinder token,final String who,final int requestCode){
+        final Entry caller=find(token);
+        if(requestCode<0)throw new IllegalArgumentException("Permission request requires a result callback");
+        String[] requested=intent.getStringArrayExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES);
+        if(requested==null)throw new IllegalArgumentException("Permission names are required");
+        final String[] names=requested.clone();
+        for(String name:names)if(name==null||name.isEmpty())throw new IllegalArgumentException("Permission name is empty");
+        post(new Runnable(){public void run(){
+            if(!stack.contains(caller))return;
+            ActivityThread thread=ActivityThread.currentActivityThread();
+            if(thread.getActivityClient(token)==null)return;
+            Activity target=thread.getActivity(token);
+            if(target==null||target.isFinishing())return;
+            int[] grants=new int[names.length];
+            try{
+                for(int index=0;index<names.length;index++)grants[index]=SdPackageManagerService.service().checkPermission(names[index],caller.info.packageName,android.os.Process.myUid()/100000);
+            }catch(RemoteException failure){throw new IllegalStateException("Permission result query failed",failure);}
+            Intent result=new Intent().putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES,names)
+                    .putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_RESULTS,grants);
+            ArrayList<ResultInfo> results=new ArrayList<ResultInfo>();
+            results.add(new ResultInfo(who,requestCode,Activity.RESULT_OK,result));
+            // Return the existing manifest-derived grants. Dangerous host
+            // permissions retain their denied state until a grant backend exists.
+            thread.handleSendResult(token,results,"SailDroid permission request completed");
+            System.err.println("SDPERMISSIONS=result_delivered|count="+names.length+"|source=existing-grants");
+        }});
     }
     public static void openInstallerFile(android.net.Uri uri){
         if(!"org.saildroid.manager".equals(SdApkPackage.NAME))throw new IllegalStateException("Installer Activity unavailable");

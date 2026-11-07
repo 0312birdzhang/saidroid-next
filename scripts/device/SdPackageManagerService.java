@@ -97,6 +97,7 @@ public final class SdPackageManagerService implements InvocationHandler {
         if(n.equals("hasSystemFeature"))return false; // No optional Android hardware feature has a host backend yet.
         if(n.equals("getSystemAvailableFeatures"))return new ParceledListSlice<FeatureInfo>(Collections.<FeatureInfo>emptyList());
         if(n.equals("getInstallerPackageName"))return app((String)a[0])==null?null:"org.saildroid.manager";
+        if(n.equals("getPermissionControllerPackageName"))return SdActivityHost.PERMISSION_CONTROLLER_PACKAGE;
         if(n.equals("isPackageSuspendedForUser")){if(app((String)a[0])==null)throw new IllegalArgumentException("Unknown package");return false;}
         throw SdRuntimeDiagnostics.unsupported("APK package service",method);
     }
