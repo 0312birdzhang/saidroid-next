@@ -19,6 +19,7 @@ flags=a.output/'registry-bridge-flags.csv';flags.write_text(''.join(n+(','+'whit
 encoded=a.output/'registry-bridge-encoded.dex';tool=Path('/var/tmp/saidroid-hiddenapi-tool-20261031/hiddenapi');run([str(tool),'encode','--input-dex='+str(raw),'--output-dex='+str(encoded),'--api-flags='+str(flags)])
 em,ec=encoder.dex_members(encoded.read_bytes());assert em==members and ec==code
 root=a.output/'root';helper=root/'bin/saildroid-setup';helper.parent.mkdir(parents=True);shutil.copyfile(Path(__file__).with_name('saildroid-setup.py'),helper);helper.chmod(0o755)
+binder_helper=root/'bin/saildroid-binder-setup.py';shutil.copyfile(Path(__file__).with_name('saildroid-binder-setup.py'),binder_helper);binder_helper.chmod(0o755)
 jar=root/'share/packaging/setup-registry.jar';jar.parent.mkdir(parents=True)
 def dex_info(name):
  info=zipfile.ZipInfo(name,(1980,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;return info

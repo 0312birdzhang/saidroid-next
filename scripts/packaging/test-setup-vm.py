@@ -39,6 +39,9 @@ class Fixture(m.Platform):
   if legacy and self.real_legacy_caps:return m.Platform.check_capabilities(self,release,legacy=True)
   m.require(not self.fail_caps,'Fixture capability failure')
  def busy(self):return self.busy_records
+ def prepare_binder(self,account,release):
+  folder=self.path('/home/art/runtime/binder')
+  if not folder.exists():owned(folder,account['uid'],0o700)
  def refresh(self,account,release,helper,count):
   self.refreshes.append(str(release));updates={}
   for directory in self.path('/home/art/apps').iterdir():
@@ -83,7 +86,14 @@ def application(host,package='com.example.fixture'):
  (root/'record.json').write_text(json.dumps(data));os.chown(root/'record.json',65534,65534)
  return root
 
-q=subprocess.run(['python3',str(module_path),'status'],capture_output=True,text=True);assert q.returncode==1 and 'Sailfish OS 5.2 only' in q.stderr;record('production-cli-refuses-build-vm')
+q=subprocess.run(['python3',str(module_path),'status'],capture_output=True,text=True);assert q.returncode==1 and 'Sailfish OS 5.2 and 5.3' in q.stderr;record('production-cli-refuses-build-vm')
+with fixture()as host:
+ a=release(host,'api29-a');previous=os.umask(0o077)
+ try:action(host,'change','api29-a')
+ finally:os.umask(previous)
+ for path,owner,mode in (('/home/art',0,0o755),('/home/art/bin',0,0o755),(m.STATE,0,0o700),('/home/art/data',65534,0o700)):
+  info=host.path(path).stat();assert info.st_uid==owner and stat.S_IMODE(info.st_mode)==mode
+ record('restrictive-umask-storage-modes')
 with fixture()as host:
  a=release(host,'api29-a');b=release(host,'api29-b');c=release(host,'api29-c')
  assert action(host,'status')['active_link']is None
@@ -150,6 +160,23 @@ def binder_snapshot(paths):
  for p in paths:
   st=p.lstat();result.append((str(p),st.st_ino,st.st_uid,st.st_gid,st.st_mode,st.st_rdev,st.st_ctime_ns,p.read_bytes()if stat.S_ISREG(st.st_mode)else None))
  return result
+with fixture()as host:
+ a=release(host,'api29-a');attempts=[]
+ def retry_binder(account,release):
+  attempts.append(str(release))
+  if len(attempts)==1:
+   owned(host.path('/home/art/runtime'),0,0o755)
+   owned(host.path('/home/art/runtime/binder'),0,0o755)
+   raise RuntimeError('Fixture interrupted Binder provisioning')
+  kernel_binder(host)
+ host.prepare_binder=retry_binder
+ must_fail('partial-binder-provisioning-refused',lambda:action(host,'change','api29-a'),'interrupted Binder')
+ assert not host.path('/home/art/api29-root').is_symlink()
+ assert not host.path(m.STATE+'/pending.json').exists()
+ action(host,'change','api29-a')
+ assert len(attempts)==2 and os.readlink(host.path('/home/art/api29-root'))==str(a)
+ record('partial-binder-provisioning-retry-finishes-activation')
+
 with fixture()as host:
  a=release(host,'api29-a');b=release(host,'api29-b');paths=kernel_binder(host);before=binder_snapshot(paths)
  action(host,'change','api29-a');action(host,'change','api29-b');action(host,'rollback')

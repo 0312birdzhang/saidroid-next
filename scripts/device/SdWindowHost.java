@@ -37,10 +37,13 @@ public final class SdWindowHost {
         if(!installed)throw new IllegalStateException("Window native backend is not installed");
         android.text.Hyphenator.init();
         main=new Handler(Looper.getMainLooper());
-        if(!nativeStart(title,appId,SdDisplayShim.WIDTH,SdDisplayShim.HEIGHT)) {
+        int width=SdDisplayShim.dimension("SAILDROID_DISPLAY_WIDTH",0);
+        int height=SdDisplayShim.dimension("SAILDROID_DISPLAY_HEIGHT",0);
+        if(!nativeStart(title,appId,width,height)) {
             throw new IllegalStateException("Wayland window could not be created");
         }
         started=true;
+        SdDisplayShim.configureFromHost();
     }
     public static void requestFrame(){if(!started)throw new IllegalStateException("Wayland host is not running");nativeRequestFrame();}
     public static boolean isStarted(){return started;}

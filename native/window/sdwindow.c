@@ -464,7 +464,43 @@ static void ping(void*d,struct xdg_wm_base*s,uint32_t serial){(void)d;xdg_wm_bas
 static const struct xdg_wm_base_listener shell_listener={.ping=ping};
 static void configure_surface(void*d,struct xdg_surface*s,uint32_t serial){(void)d;xdg_surface_ack_configure(s,serial);configured=1;}
 static const struct xdg_surface_listener surface_listener={.configure=configure_surface};
-static void configure_top(void*d,struct xdg_toplevel*t,int32_t w,int32_t h,struct wl_array*states){(void)d;(void)t;if(!width){width=w>0?w:source_w;height=h>0?h:source_h;}uint32_t*state;int active=0;wl_array_for_each(state,states)if(*state==XDG_TOPLEVEL_STATE_ACTIVATED)active=1;if(!keyboard_focus_known&&active!=last_xdg_active){emit_focus(active);}last_xdg_active=active;}
+static void configure_top(void *data, struct xdg_toplevel *top, int32_t w,
+                          int32_t h, struct wl_array *states) {
+    (void)data;
+    (void)top;
+    if (!width) {
+        width = w > 0 ? w : (source_w > 0 ? source_w : 1080);
+        height = h > 0 ? h : (source_h > 0 ? source_h : 2160);
+    }
+    uint32_t *state;
+    int active = 0;
+    wl_array_for_each(state, states)
+        if (*state == XDG_TOPLEVEL_STATE_ACTIVATED) active = 1;
+    if (!keyboard_focus_known && active != last_xdg_active) emit_focus(active);
+    last_xdg_active = active;
+}
+
+static int prepare_display(void) {
+    if (!source_w) source_w = width;
+    if (!source_h) source_h = height;
+    if (source_w <= 0 || source_h <= 0 ||
+        (size_t)source_w > SIZE_MAX / sizeof(uint32_t) / (size_t)source_h) {
+        snprintf(failure, sizeof(failure), "Invalid display dimensions");
+        return -1;
+    }
+    latest = calloc((size_t)source_w * source_h, sizeof(uint32_t));
+    if (!latest) {
+        snprintf(failure, sizeof(failure), "Display allocation failed");
+        return -1;
+    }
+    // ART starts after bootstrap returns. Java reads the same content dimensions.
+    char pixels[32];
+    snprintf(pixels, sizeof(pixels), "%d", source_w);
+    if (setenv("SAILDROID_DISPLAY_WIDTH", pixels, 1) != 0) return -1;
+    snprintf(pixels, sizeof(pixels), "%d", source_h);
+    if (setenv("SAILDROID_DISPLAY_HEIGHT", pixels, 1) != 0) return -1;
+    return 0;
+}
 static void close_top(void*d,struct xdg_toplevel*t){(void)d;(void)t;request_close();}
 static const struct xdg_toplevel_listener top_listener={.configure=configure_top,.close=close_top};
 /* 输入链路取证（同 `<clinit>` 一样属于"不许靠猜"的地方）：Wayland 触摸到底有没有被
@@ -600,7 +636,7 @@ static void publish(void){
   if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)monotonic_ns());check_callback();}
  }
 }
-static void*run_window(void*unused){(void)unused;if(!early_window)callbacks_available();display=wl_display_connect(NULL);if(!display){snprintf(failure,sizeof(failure),"Wayland connection failed: %s",strerror(errno));goto failed;}struct wl_registry*r=wl_display_get_registry(display);wl_registry_add_listener(r,&registry_listener,NULL);if(wl_display_roundtrip(display)<0||!compositor||!shm||!shell){snprintf(failure,sizeof(failure),"Required Wayland globals unavailable");goto failed;}surface=wl_compositor_create_surface(compositor);if(surface_extension){extended_surface=qt_surface_extension_get_extended_surface(surface_extension,surface);qt_extended_surface_add_listener(extended_surface,&extended_listener,NULL);qt_extended_surface_set_content_orientation_mask(extended_surface,1);}xdg_surface=xdg_wm_base_get_xdg_surface(shell,surface);xdg_surface_add_listener(xdg_surface,&surface_listener,NULL);toplevel=xdg_surface_get_toplevel(xdg_surface);xdg_toplevel_add_listener(toplevel,&top_listener,NULL);xdg_toplevel_set_title(toplevel,title);xdg_toplevel_set_app_id(toplevel,app_id);wl_surface_commit(surface);while(!configured)if(wl_display_dispatch(display)<0)goto failed;if(hardware_mode()&&create_gpu_background()<0){snprintf(failure,sizeof(failure),"GPU host background failed");goto failed;}if(hardware_mode()){if(sd_hwui_background_startup(getenv("SAILDROID_STARTUP_ICON"),source_w,source_h)!=0){snprintf(failure,sizeof(failure),"GPU initial presentation failed");goto failed;}gpu_startup_mapped=1;early_gpu=early_window!=0;fprintf(stderr,"SDHOST=startup_mapped|pid=%d|surface=%p|android_frame=false\n",getpid(),(void*)surface);}
+static void*run_window(void*unused){(void)unused;if(!early_window)callbacks_available();display=wl_display_connect(NULL);if(!display){snprintf(failure,sizeof(failure),"Wayland connection failed: %s",strerror(errno));goto failed;}struct wl_registry*r=wl_display_get_registry(display);wl_registry_add_listener(r,&registry_listener,NULL);if(wl_display_roundtrip(display)<0||!compositor||!shm||!shell){snprintf(failure,sizeof(failure),"Required Wayland globals unavailable");goto failed;}surface=wl_compositor_create_surface(compositor);if(surface_extension){extended_surface=qt_surface_extension_get_extended_surface(surface_extension,surface);qt_extended_surface_add_listener(extended_surface,&extended_listener,NULL);qt_extended_surface_set_content_orientation_mask(extended_surface,1);}xdg_surface=xdg_wm_base_get_xdg_surface(shell,surface);xdg_surface_add_listener(xdg_surface,&surface_listener,NULL);toplevel=xdg_surface_get_toplevel(xdg_surface);xdg_toplevel_add_listener(toplevel,&top_listener,NULL);xdg_toplevel_set_title(toplevel,title);xdg_toplevel_set_app_id(toplevel,app_id);wl_surface_commit(surface);while(!configured)if(wl_display_dispatch(display)<0)goto failed;if(prepare_display()<0)goto failed;if(hardware_mode()&&create_gpu_background()<0){snprintf(failure,sizeof(failure),"GPU host background failed");goto failed;}if(hardware_mode()){if(sd_hwui_background_startup(getenv("SAILDROID_STARTUP_ICON"),source_w,source_h)!=0){snprintf(failure,sizeof(failure),"GPU initial presentation failed");goto failed;}gpu_startup_mapped=1;early_gpu=early_window!=0;fprintf(stderr,"SDHOST=startup_mapped|pid=%d|surface=%p|android_frame=false\n",getpid(),(void*)surface);}
 int64_t alloc_started=monotonic_ns();if(!hardware_mode()){for(int i=0;i<buffer_count;i++)if(allocate_buffer(&buffers[i])){snprintf(failure,sizeof(failure),"SHM allocation failed");goto failed;}if(perf_on)perf_alloc_ns=monotonic_ns()-alloc_started;buffers[0].busy=1;wl_surface_attach(surface,buffers[0].object,0,0);wl_surface_damage(surface,0,0,width,height);wl_surface_commit(surface);}wl_display_flush(display);pthread_mutex_lock(&lock);ready=1;if(perf_on)perf_ready_ns=monotonic_ns();pthread_cond_broadcast(&ready_condition);pthread_mutex_unlock(&lock);fprintf(stderr,"SDWINDOW=ready|size=%dx%d|source=%dx%d\n",width,height,source_w,source_h);while(running){publish();while(wl_display_prepare_read(display)!=0)if(wl_display_dispatch_pending(display)<0)goto done;wl_display_flush(display);struct pollfd fds[]={{wl_display_get_fd(display),POLLIN,0},{wake_fd,POLLIN,0}};int wait_ms=1000;pthread_mutex_lock(&lock);if(hardware_mode()&&!gpu_parent_mapped&&want_frame){int64_t left=bootstrap_next_ns-monotonic_ns();wait_ms=left>0?(int)((left+999999)/1000000):0;}pthread_mutex_unlock(&lock);int n=poll(fds,2,wait_ms);if(n<0&&errno==EINTR){wl_display_cancel_read(display);continue;}if(n<0){wl_display_cancel_read(display);break;}if(fds[0].revents&POLLIN){if(wl_display_read_events(display)<0)break;}else wl_display_cancel_read(display);if(fds[1].revents&POLLIN){uint64_t value;while(read(wake_fd,&value,sizeof(value))>0){}}if(wl_display_dispatch_pending(display)<0)break;}done:perf_dump();sd_activation_stop();if(hardware_mode())sd_hwui_background_destroy();if(extended_surface){qt_extended_surface_destroy(extended_surface);extended_surface=NULL;}if(toplevel)xdg_toplevel_destroy(toplevel);if(xdg_surface)xdg_surface_destroy(xdg_surface);if(surface)wl_surface_destroy(surface);if(display){wl_display_flush(display);wl_display_disconnect(display);display=NULL;}if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,closed_event);check_callback();(*vm)->DetachCurrentThread(vm);}else _exit(0);return NULL;failed:perf_dump();pthread_mutex_lock(&lock);ready=-1;running=0;pthread_cond_broadcast(&ready_condition);pthread_mutex_unlock(&lock);if(display)wl_display_disconnect(display);if(thread_env)(*vm)->DetachCurrentThread(vm);return NULL;}
 JNIEXPORT void JNICALL Java_SdWindowHost_nativeSelectHardware(JNIEnv*e,jclass c,jboolean enabled){
  (void)c;atomic_store(&selected_hardware,enabled?1:0);setenv("SAILDROID_HWUI",enabled?"1":"0",1);wake_host();
@@ -610,7 +646,7 @@ JNIEXPORT void JNICALL Java_SdWindowHost_nativeSelectHardware(JNIEnv*e,jclass c,
 }
 static int start_window(const char *ts,const char *as,int w,int h){
  pthread_mutex_lock(&lock);if(running){pthread_mutex_unlock(&lock);return 1;}
- perf_start_ns=monotonic_ns();perf_on=getenv("SAILDROID_PERF")!=NULL;direct_shm=getenv("SAILDROID_DIRECT_SHM")!=NULL;direct_copy=getenv("SAILDROID_NO_DIRECT_COPY")==NULL;buffer_count=getenv("SAILDROID_NO_TRIPLE_BUFFER")!=NULL?2:3;if(perf_on&&!perf_samples){perf_samples=calloc(PERF_MAX_SAMPLES,sizeof(struct perf_sample));if(!perf_samples)perf_on=0;}if(perf_on)perf_open_stream();source_w=w;source_h=h;width=height=0;configured=0;snprintf(title,sizeof(title),"%s",ts);snprintf(app_id,sizeof(app_id),"%s",as);latest=calloc((size_t)w*h,4);wake_fd=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);if(!latest||wake_fd<0){pthread_mutex_unlock(&lock);return JNI_FALSE;}running=1;pthread_create(&thread,NULL,run_window,NULL);struct timespec deadline;clock_gettime(CLOCK_REALTIME,&deadline);deadline.tv_sec+=8;while(!ready){if(pthread_cond_timedwait(&ready_condition,&lock,&deadline)==ETIMEDOUT){running=0;break;}}int success=ready==1;pthread_mutex_unlock(&lock);if(success){if(early_window)host_window_event("mapped",1);const char *control=getenv("SAILDROID_CONTROL_SOCKET");if(control&&sd_activation_start(control,request_activation,request_close,request_open,request_dump)<0)fprintf(stderr,"SDWINDOW=activation_unavailable|errno=%d\n",errno);}if(!success)fprintf(stderr,"SDWINDOW=start_failed|%s\n",failure);return success;
+ perf_start_ns=monotonic_ns();perf_on=getenv("SAILDROID_PERF")!=NULL;direct_shm=getenv("SAILDROID_DIRECT_SHM")!=NULL;direct_copy=getenv("SAILDROID_NO_DIRECT_COPY")==NULL;buffer_count=getenv("SAILDROID_NO_TRIPLE_BUFFER")!=NULL?2:3;if(perf_on&&!perf_samples){perf_samples=calloc(PERF_MAX_SAMPLES,sizeof(struct perf_sample));if(!perf_samples)perf_on=0;}if(perf_on)perf_open_stream();source_w=w;source_h=h;width=height=0;configured=0;snprintf(title,sizeof(title),"%s",ts);snprintf(app_id,sizeof(app_id),"%s",as);wake_fd=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);if(wake_fd<0){pthread_mutex_unlock(&lock);return JNI_FALSE;}running=1;pthread_create(&thread,NULL,run_window,NULL);struct timespec deadline;clock_gettime(CLOCK_REALTIME,&deadline);deadline.tv_sec+=8;while(!ready){if(pthread_cond_timedwait(&ready_condition,&lock,&deadline)==ETIMEDOUT){running=0;break;}}int success=ready==1;pthread_mutex_unlock(&lock);if(success){if(early_window)host_window_event("mapped",1);const char *control=getenv("SAILDROID_CONTROL_SOCKET");if(control&&sd_activation_start(control,request_activation,request_close,request_open,request_dump)<0)fprintf(stderr,"SDWINDOW=activation_unavailable|errno=%d\n",errno);}if(!success)fprintf(stderr,"SDWINDOW=start_failed|%s\n",failure);return success;
 }
 int sd_window_bootstrap(const char *name,const char *identity,int w,int h){early_window=1;return start_window(name,identity,w,h);}
 JNIEXPORT jboolean JNICALL Java_SdWindowHost_nativeStart(JNIEnv*e,jclass c,jstring t,jstring a,jint w,jint h){

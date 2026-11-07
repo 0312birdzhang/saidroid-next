@@ -137,7 +137,7 @@ those items immediately. Existing APKs, records, app data, and AOT directories
 are not modified or deleted. Rollback to an initially unconfigured system removes
 setup-created launcher entries while retaining the app store.
 
-Production prerequisites are Sailfish OS 5.2, aarch64, Python 3.9 or newer, `rpm`,
+Production prerequisites are Sailfish OS 5.2 or 5.3, aarch64, Python 3.9 or newer, `rpm`,
 `getcap`, an existing ordinary `defaultuser`, and its active user-bus and Wayland
 session. Account UID/GID/home/groups are read from the actual account database.
 The expected versioned RPM must own `runtime.json`, verify cleanly, have no
@@ -152,12 +152,22 @@ fail closed. `status` is read-only; activation prepares only the compatible
 An already-provisioned `/home/art/runtime/binder` is preserved when the directory
 is root:root 0755 beneath trusted parents, `binder` is a real character device
 owned by the selected user with mode 0600, and `provision.json` is a root-owned
-regular file with mode 0644. Setup inspects metadata only; it does not open the
-device, chown the tree, replace nodes, or change the provision file. Linked or
-writable substitutes fail closed, and this exception does not permit root-owned
+regular file with mode 0644. External provisioning is preserved, and its device
+is checked for Binder protocol 8. Linked or writable substitutes fail closed,
+and this exception does not permit root-owned
 application storage. A VM fixture uses a real character node and checks that
 activation, upgrade, and rollback preserve inode, rdev, mode, owner, ctime, and
 provision bytes. Invalid variants are separately rejected before switching roots.
+
+New setup payloads include `bin/saildroid-binder-setup.py`. Activation uses it to
+prepare a private binderfs instance and bind its device at the configured path.
+Kernels that create `binder` on mount use that node. Other kernels create it with
+`BINDER_CTL_ADD`. The node belongs to `defaultuser` with mode 0600. Only the common
+runtime and Binder directories become root-owned 0755. The helper installs and
+enables `saildroid-binder.service` before the user session, with an independent
+root-owned copy at `/usr/local/sbin/saildroid-binder-setup`. Repeated execution
+preserves the device identity. Boot recreates the mount and refreshes device
+metadata. This common prerequisite remains available across runtime rollback.
 
 Close all SailDroid hosts, including its native session manager, before activation.
 The helper never kills them. It holds both a root setup lock and the existing
