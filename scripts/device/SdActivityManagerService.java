@@ -417,6 +417,12 @@ public final class SdActivityManagerService implements InvocationHandler {
         if ("checkPermission".equals(name)) {
             return checkLocalPermission((String) args[0], (Integer) args[1], (Integer) args[2]);
         }
+        if ("activityRelaunched".equals(name)) {
+            IBinder token = (IBinder) args[0];
+            activity(token).idle = false;
+            SdActivityHost.activityRelaunched(token);
+            return null;
+        }
         if ("activityResumed".equals(name)) { activity((IBinder)args[0]).lifecycleResumed=true;setActivityResumed(true);return null; }
         if ("activityPaused".equals(name)||"activityStopped".equals(name)) {
             activity((IBinder)args[0]).lifecycleResumed=false;

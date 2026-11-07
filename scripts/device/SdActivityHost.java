@@ -126,6 +126,11 @@ public final class SdActivityHost {
         System.err.println("SDACTIVITY=transaction_scheduled|class="+info.name+"|stack="+stack.size());
         verifyLaunch(thread,e,old,0);
     }
+    public static void activityRelaunched(IBinder token){
+        Entry entry = find(token);
+        verifyLaunch(ActivityThread.currentActivityThread(),entry,null,0);
+        System.err.println("SDACTIVITY=relaunch_reported|class="+entry.info.name);
+    }
     private static void verifyLaunch(final ActivityThread thread,final Entry e,final Entry old,final int attempt){
         post(new Runnable(){public void run(){try{
             e.activity=thread.getActivity(e.token);e.record=ActivityThread.class.getMethod("getActivityClient",IBinder.class).invoke(thread,e.token);
