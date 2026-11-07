@@ -62,6 +62,10 @@ public final class SdInputMethods implements InvocationHandler,SdMaliit.Listener
     }
     private SdInputMethods(){service=(IInputMethodManager)Proxy.newProxyInstance(IInputMethodManager.class.getClassLoader(),new Class<?>[]{IInputMethodManager.class},this);binder.attachInterface(service,"com.android.internal.view.IInputMethodManager");}
     public static IBinder binder(){return instance.binder;}public static IInputMethodManager service(){return instance.service;}
+    public static void registerClient(IInputMethodClient callback,IInputContext context){
+        Client c=new Client(callback,context);c.session=instance.session(c);
+        instance.clients.put(callback.asBinder(),c);
+    }
     public static void requestShow(){ Client c=instance.focused; if(c!=null&&c.editor!=null)instance.show(c,true,null); }
     private Client client(Object object){Client c=clients.get(((IInputMethodClient)object).asBinder());if(c==null)throw new IllegalArgumentException("Input client was not registered");return c;}
     private boolean hidden(Client c){int type=c.editor.inputType,variation=type&InputType.TYPE_MASK_VARIATION;return(type&InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_NUMBER?variation==InputType.TYPE_NUMBER_VARIATION_PASSWORD:variation==InputType.TYPE_TEXT_VARIATION_PASSWORD||variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD||variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;}
@@ -113,9 +117,7 @@ public final class SdInputMethods implements InvocationHandler,SdMaliit.Listener
             }else if((Integer)a[2]!=SdDisplayShim.DISPLAY_ID){
                 throw new IllegalArgumentException("Unknown input display");
             }
-            IInputMethodClient callback=(IInputMethodClient)a[0];
-            Client c=new Client(callback,(IInputContext)a[1]);c.session=session(c);
-            clients.put(callback.asBinder(),c);return null;
+            registerClient((IInputMethodClient)a[0],(IInputContext)a[1]);return null;
         }
         if(n.equals("removeClient")){
             Client c=clients.remove(((IInputMethodClient)a[0]).asBinder());
