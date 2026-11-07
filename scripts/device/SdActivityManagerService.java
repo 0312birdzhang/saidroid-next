@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.IdentityHashMap;
 
 public final class SdActivityManagerService implements InvocationHandler {
+    private final SdPendingIntents pendingIntents = new SdPendingIntents(this);
     private final Binder binder = new Binder();
     private final IActivityManager service;
     private final int pid = Process.myPid();
@@ -154,6 +155,69 @@ public final class SdActivityManagerService implements InvocationHandler {
     private synchronized void unregisterReceiver(IIntentReceiver receiver) {
         if (receiver == null || receivers.remove(receiver.asBinder()) == null) {
             throw new IllegalArgumentException("Receiver was not registered");
+        }
+    }
+
+    private int manifestReceiversPending;
+
+    synchronized void checkManifestReceiverUser(int user) {
+        requireLocalUser(user);
+    }
+
+    synchronized boolean allowManifestReceiver(ActivityInfo info, String[] requiredPermissions,
+                                               int user) throws Exception {
+        requireLocalUser(user);
+        if (info == null || !packageName.equals(info.packageName)) {
+            throw new SecurityException("Manifest receiver owner differs");
+        }
+        if (!holdsPermission(info.permission)) return false;
+        if (requiredPermissions != null) {
+            for (String permission : requiredPermissions) {
+                if (!holdsPermission(permission)) return false;
+            }
+        }
+        return true;
+    }
+
+    synchronized void scheduleManifestReceiver(Intent intent, ActivityInfo info, int result,
+                                               String resultData, android.os.Bundle extras,
+                                               int user) throws Exception {
+        requireLocalUser(user);
+        if (!packageName.equals(info.packageName) || !processName.equals(info.processName)) {
+            throw new SecurityException("Manifest receiver process differs");
+        }
+        if (applicationThread == null) throw new IllegalStateException("ApplicationThread is not attached");
+        manifestReceiversPending++;
+        try {
+            applicationThread.scheduleReceiver(new Intent(intent), new ActivityInfo(info),
+                    android.content.res.CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,
+                    result, resultData, extras == null ? null : new android.os.Bundle(extras),
+                    false, user, ActivityManager.PROCESS_STATE_RECEIVER);
+        } catch (Exception failure) {
+            manifestReceiversPending--;
+            throw failure;
+        }
+        System.err.println("SDBROADCAST=manifest_queued|class=" + info.name + "|process=" + processName);
+    }
+
+    private synchronized void finishManifestReceiver(IBinder token) {
+        if (applicationThread == null || token != applicationThread.asBinder() || manifestReceiversPending <= 0) {
+            throw new IllegalArgumentException("No scheduled manifest receiver owns this completion");
+        }
+        manifestReceiversPending--;
+        System.err.println("SDBROADCAST=manifest_finished|pending=" + manifestReceiversPending + "|process=" + processName);
+    }
+
+    void dispatchPendingBroadcast(Intent intent, String type, int code, String permission,
+                                  int user) throws Exception {
+        String[] requiredPermissions = permission == null ? null : new String[]{permission};
+        if (intent.getComponent() != null) {
+            SdManifestReceivers.send(intent, code, null, null, requiredPermissions, user);
+        } else {
+            deliverBroadcast(intent, type, code, null, null, requiredPermissions, user, false);
+            if (SdKernelServices.enabled()) {
+                SdRemoteServices.broadcast(intent, type, code, null, null, requiredPermissions, user);
+            }
         }
     }
 
@@ -327,6 +391,10 @@ public final class SdActivityManagerService implements InvocationHandler {
         }
         if ("getForegroundServiceType".equals(name))return 0; // Foreground starts are rejected above.
         if ("getCurrentUser".equals(name)) return SdUsers.current();
+        if ("finishReceiver".equals(name)) {
+            finishManifestReceiver((IBinder) args[0]);
+            return null;
+        }
         if ("attachApplication".equals(name)) {
             android.app.IApplicationThread incoming=(android.app.IApplicationThread)args[0];
             if(applicationThread!=null&&applicationThread.asBinder()!=incoming.asBinder())throw new IllegalStateException("Another application thread is already attached");
@@ -372,6 +440,14 @@ public final class SdActivityManagerService implements InvocationHandler {
             activity((IBinder) args[0]);
             // This host's launch request supplied no ActivityOptions bundle.
             return null;
+        }
+        if ("getIntentSender".equals(name) || "cancelIntentSender".equals(name) || "sendIntentSender".equals(name)
+                || "getPackageForIntentSender".equals(name) || "getUidForIntentSender".equals(name)
+                || "getIntentForIntentSender".equals(name) || "getTagForIntentSender".equals(name)
+                || "isIntentSenderAnActivity".equals(name) || "isIntentSenderAForegroundService".equals(name)
+                || "isIntentSenderABroadcast".equals(name) || "isIntentSenderTargetedToPackage".equals(name)
+                || "registerIntentSenderCancelListener".equals(name) || "unregisterIntentSenderCancelListener".equals(name)) {
+            return pendingIntents.invoke(name, args);
         }
         if ("registerReceiver".equals(name)) return registerReceiver(args);
         if ("unregisterReceiver".equals(name)) {

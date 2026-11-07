@@ -93,4 +93,5 @@
     "_ZN7android36register_android_net_LocalSocketImplEP7_JNIEnv",
     "_ZN7android33register_android_net_NetworkUtilsEP7_JNIEnv",
     "_ZN7android34register_android_text_StaticLayoutEP7_JNIEnv",
+    "_ZN7android39register_android_text_MeasuredParagraphEP7_JNIEnv",
     "_ZN7android40register_android_graphics_SurfaceTextureEP7_JNIEnv",
