@@ -38,6 +38,7 @@ public final class SdRuntime {
         if(!SdBridge.installClassLoaderNamespaces())throw new IllegalStateException("Application native namespace backend unavailable");
         SdClassLoaderNamespaces.installNativePathListener();
         if(!SdBridge.installGraphicsEnvironment())throw new IllegalStateException("Graphics configuration backend unavailable");
+        SdMediaPlayer.installBackend();
         }
         if(Boolean.getBoolean("saidroid.vmExitDiagnostics")){SdBridge.installExitDiagnostics();SdRuntimeDiagnostics.captureUncaught();}
         if(android.graphics.Typeface.DEFAULT==null)throw new IllegalStateException("Android system font map unavailable");
