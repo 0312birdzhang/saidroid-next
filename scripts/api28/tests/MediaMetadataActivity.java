@@ -30,9 +30,7 @@ public final class MediaMetadataActivity extends Activity {
         new Thread(() -> {
             try {
                 verifyMedia();
-                verifyCamera();
-                System.err.println("API28_MEDIA=passed|photos_taken=0");
-                runOnUiThread(() -> status.setText("Media metadata passed"));
+                runOnUiThread(() -> startActivityForResult(new android.content.Intent(this, CameraProbeActivity.class), 42));
             } catch (Throwable failure) {
                 failure.printStackTrace();
                 System.err.println("API28_MEDIA=failed|type=" + failure.getClass().getName());
@@ -107,16 +105,9 @@ public final class MediaMetadataActivity extends Activity {
         System.err.println("API28_MEDIA=inventory|images=" + images + "|videos=" + videos);
     }
 
-    private void verifyCamera() {
-        int cameras = Camera.getNumberOfCameras();
-        require(cameras > 0, "Physical camera inventory absent");
-        for (int id = 0; id < cameras; id++) {
-            Camera.CameraInfo info = new Camera.CameraInfo();
-            Camera.getCameraInfo(id, info);
-            Camera camera = Camera.open(id);
-            try { require(camera.getParameters().getPreviewSize().width > 0, "Camera parameters missing"); }
-            finally { camera.release(); }
-        }
-        System.err.println("API28_MEDIA=camera|count=" + cameras);
+    @Override public void onActivityResult(int request, int code, android.content.Intent data) {
+        super.onActivityResult(request, code, data);
+        require(request == 42 && code == RESULT_OK, "Remote camera Activity did not return");
+        System.err.println("API28_MEDIA=passed|photos_taken=0|separate_camera_process=true");
     }
 }

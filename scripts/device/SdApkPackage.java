@@ -24,6 +24,11 @@ public final class SdApkPackage {
         if(parsed==null)try{
             parsed=new PackageParser().parsePackage(new File(APK),0);
             if(!NAME.equals(parsed.packageName))throw new SecurityException("APK package differs from its installation record");
+            // API28 leaves the implicit application/component process unset.
+            // Services without android:process belong to the application's process.
+            if(parsed.applicationInfo.processName==null)parsed.applicationInfo.processName=NAME;
+            for(PackageParser.Service service:parsed.services)
+                if(service.info.processName==null)service.info.processName=parsed.applicationInfo.processName;
         }catch(Exception failure){throw new IllegalStateException("Cannot read installed APK metadata",failure);}
         return parsed;
     }
