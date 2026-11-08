@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 /** One isolated Qt/WPE host per WebView. The UI thread never waits for IPC. */
 public final class SdWebEngine {
+    public static final int MAX_HOST_WIDTH=2160,MAX_HOST_HEIGHT=2160;
     public interface Listener {
         void event(JSONObject event);
         void frame(Bitmap bitmap, long sequence);
@@ -34,7 +35,7 @@ public final class SdWebEngine {
 
     public SdWebEngine(File directory, int w, int h, Listener target) {
         helper = helperPath(); profile = new File(directory,"webview-host").getAbsolutePath();
-        width = Math.max(1,w); height = Math.max(1,h); listener = target;
+        width = Math.max(1,Math.min(w,MAX_HOST_WIDTH)); height = Math.max(1,Math.min(h,MAX_HOST_HEIGHT)); listener = target;
         Thread starter = new Thread(new Runnable() { public void run() { start(); } },"sd-webview-reader");
         starter.setDaemon(true);starter.start();
     }

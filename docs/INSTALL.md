@@ -45,6 +45,17 @@ reboot
 
 如果激活事务被中断，使用 `recover` 恢复事务后再检查 `status`。回退保留 APK 和应用数据；它不会凭空安装缺少的旧版本。若此前部署了与旧运行时绑定的应用 AOT 缓存，必须同步恢复对应缓存，或使用工具重新生成；本次开发设备的旧缓存保存在本地备份中，不在发行 RPM 内。运行时与应用缓存的输入哈希必须匹配，不要将新旧版本的缓存混用。
 
+## 4. 非 1080x2160 屏幕与 Android 9 底包
+
+运行时默认按已验证的 1080x2160（Pixel 3a XL / bonito）报告显示信息。其他面板在启动应用前设置以下环境变量（可写入用户会话的 `~/.config/environment.d/saildroid.conf`）：
+
+```sh
+SAILDROID_DISPLAY_WIDTH=1080
+SAILDROID_DISPLAY_HEIGHT=2340
+```
+
+Android 9（API 28）底包上 `libsdhost29.so` 会把 ART 自带的 `libjavacore.so`/`libopenjdk*.so` 交给 glibc 加载，以匹配随包发布的 Java 核心。WebView 的 Qt/WPE 宿主不接受初始高度大于 2160，运行时已将宿主尺寸限制为 2160。
+
 ## 开发认证
 
 设备脚本默认使用 SSH 别名 `bonito`。自行配置 SSH 密钥，或在执行需要 `sshpass` 的历史开发脚本前提供环境变量 `SSHPASS`。公开源码和公开修订包都不携带调试密码或签名私钥。

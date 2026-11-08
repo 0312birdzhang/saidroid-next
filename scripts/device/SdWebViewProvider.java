@@ -485,7 +485,7 @@ public final class SdWebViewProvider {
         }
         void resizeEngine() {
             if(engine == null || frameW < 1 || frameH < 1)return;
-            try{command(new JSONObject().put("op","resize").put("width",frameW).put("height",frameH));}
+            try{command(new JSONObject().put("op","resize").put("width",Math.min(frameW,SdWebEngine.MAX_HOST_WIDTH)).put("height",Math.min(frameH,SdWebEngine.MAX_HOST_HEIGHT)));}
             catch(Exception failure){engineFailed("resize:"+failure.getClass().getSimpleName());}
         }
 
