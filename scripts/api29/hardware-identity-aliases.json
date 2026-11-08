@@ -1,0 +1,6 @@
+{
+  "schema": "saildroid-hardware-aliases-v1",
+  "aliases": {
+    "fajita": ["OnePlus6T"]
+  }
+}
