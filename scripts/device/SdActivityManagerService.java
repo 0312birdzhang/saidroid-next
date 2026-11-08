@@ -235,7 +235,13 @@ public final class SdActivityManagerService implements InvocationHandler {
             requireLocalUser(user);
             if(requiredPermissions!=null)for(String permission:requiredPermissions)if(!holdsPermission(permission))return;
             if(intent.getComponent()!=null)throw new UnsupportedOperationException("Manifest receivers unavailable");
-            if(intent.getPackage()!=null&&!packageName.equals(intent.getPackage()))throw new UnsupportedOperationException("Cross-application delivery unavailable");
+            // A foreign package has no receivers in this process. Complete the
+            // local dispatch while retaining the caller's remote-process routing.
+            if (intent.getPackage() != null && !packageName.equals(intent.getPackage())) {
+                System.err.println("SDBROADCAST=local_skipped|reason=foreign-package|action="
+                        + intent.getAction() + "|target=" + intent.getPackage());
+                return;
+            }
             for(ReceiverRecord record:receivers.values())for(ReceiverFilter entry:record.filters){
                 if(entry.filter.match(intent.getAction(),type,intent.getScheme(),intent.getData(),intent.getCategories(),"SailDroidBroadcast")>=0&&holdsPermission(entry.permission)){targets.add(record.receiver);break;}
             }

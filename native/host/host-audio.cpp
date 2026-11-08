@@ -34,7 +34,29 @@ struct Query {
   }
 };
 void server(pa_context*,const pa_server_info *info,void *data){auto&q=*(Query*)data;if(info){q.default_sink=info->default_sink_name?info->default_sink_name:"";q.default_source=info->default_source_name?info->default_source_name:"";}}
-void sink(pa_context*,const pa_sink_info *i,int end,void *data){if(end||!i)return;auto&q=*(Query*)data;Json row={{"id",i->index},{"name",i->name?i->name:""},{"description",i->description?i->description:""},{"rate",i->sample_spec.rate},{"channels",i->sample_spec.channels},{"volume",double(pa_cvolume_avg(&i->volume))/PA_VOLUME_NORM},{"muted",bool(i->mute)},{"active",i->state==PA_SINK_RUNNING},{"default",q.default_sink==(i->name?i->name:"")}};q.result["outputs"].push_back(row);}
+std::string property(pa_proplist *properties,const char *name){
+  const char *value=properties?pa_proplist_gets(properties,name):nullptr;
+  return value?value:"";
+}
+void sink(pa_context*,const pa_sink_info *info,int end,void *data){
+  if(end||!info)return;
+  auto &query=*static_cast<Query*>(data);
+  Json row={
+    {"id",info->index},
+    {"name",info->name?info->name:""},
+    {"description",info->description?info->description:""},
+    {"rate",info->sample_spec.rate},
+    {"channels",info->sample_spec.channels},
+    {"volume",double(pa_cvolume_avg(&info->volume))/PA_VOLUME_NORM},
+    {"muted",bool(info->mute)},
+    {"active",info->state==PA_SINK_RUNNING},
+    {"default",query.default_sink==(info->name?info->name:"")},
+    {"device_api",property(info->proplist,"device.api")},
+    {"bluetooth_protocol",property(info->proplist,"bluetooth.protocol")},
+    {"bluez5_profile",property(info->proplist,"api.bluez5.profile")}
+  };
+  query.result["outputs"].push_back(row);
+}
 void source(pa_context*,const pa_source_info *i,int end,void *data){if(end||!i||i->monitor_of_sink!=PA_INVALID_INDEX)return;auto&q=*(Query*)data;Json row={{"id",i->index},{"name",i->name?i->name:""},{"description",i->description?i->description:""},{"rate",i->sample_spec.rate},{"channels",i->sample_spec.channels},{"muted",bool(i->mute)},{"active",i->state==PA_SOURCE_RUNNING},{"default",q.default_source==(i->name?i->name:"")}};q.result["inputs"].push_back(row);}
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_saildroid_host_HostApi_audioSnapshot(JNIEnv*e,jclass){
@@ -54,6 +76,14 @@ static jint patches(JNIEnv*e,jclass,jobject list,jintArray gen){return e->CallSt
 static jint fcc(JNIEnv*,jclass){return 8;}
 static jboolean stream(JNIEnv*e,jclass,jint id,jint ms){return e->CallStaticBooleanMethod(audio_class,e->GetStaticMethodID(audio_class,"streamActive","(II)Z"),id,ms);}
 static jboolean mic(JNIEnv*e,jclass){return e->CallStaticBooleanMethod(audio_class,e->GetStaticMethodID(audio_class,"microphoneMuted","()Z"));}
+static jint primary_rate(JNIEnv*env,jclass){
+ jmethodID getter=env->GetStaticMethodID(audio_class,"primaryOutputSamplingRate","()I");
+ return env->CallStaticIntMethod(audio_class,getter);
+}
+static jint primary_frames(JNIEnv*env,jclass){
+ jmethodID getter=env->GetStaticMethodID(audio_class,"primaryOutputFrameCount","()I");
+ return env->CallStaticIntMethod(audio_class,getter);
+}
 static void events(JNIEnv*e,jobject,jobject ref){e->CallStaticVoidMethod(audio_class,e->GetStaticMethodID(audio_class,"setupEvents","(Ljava/lang/Object;)V"),ref);}
 static void finalize_events(JNIEnv*,jobject){} // weak-owner polling has no native allocation
 extern "C" JNIEXPORT void JNICALL Java_SdAudio_nativeInstall(JNIEnv*e,jclass c,jclass channel_owner){
@@ -63,6 +93,8 @@ extern "C" JNIEXPORT void JNICALL Java_SdAudio_nativeInstall(JNIEnv*e,jclass c,j
  jclass audio_system=e->FindClass("android/media/AudioSystem");
  if(!audio_system)return;
  JNINativeMethod system[]={
+  {(char*)"getPrimaryOutputSamplingRate",(char*)"()I",(void*)primary_rate},
+  {(char*)"getPrimaryOutputFrameCount",(char*)"()I",(void*)primary_frames},
   {(char*)"listAudioPorts",(char*)"(Ljava/util/ArrayList;[I)I",(void*)ports},
   {(char*)"listAudioPatches",(char*)"(Ljava/util/ArrayList;[I)I",(void*)patches},
   {(char*)"isStreamActive",(char*)"(II)Z",(void*)stream},

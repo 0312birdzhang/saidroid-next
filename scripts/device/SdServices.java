@@ -37,6 +37,7 @@ public final class SdServices {
         register("window", SdWindowManager.binder());
         register("input", SdInputManager.binder());
         register("input_method", SdInputMethods.binder());
+        register("textservices", SdTextServices.binder());
         register("display", SdDisplayShim.binder());
         register("mount", SdStorageManager.binder());
         register("user", SdUsers.binder());

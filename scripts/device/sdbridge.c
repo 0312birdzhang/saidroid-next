@@ -172,6 +172,7 @@ void bionic_get_malloc_leak_info(uint8_t **info, size_t *overall, size_t *entry,
 void bionic_free_malloc_leak_info(uint8_t *info) { free(info); }
 
 extern int sd_import_host_hardware_properties(void *private_libc);
+extern int sd_import_host_product_properties(void *private_libc);
 
 JNIEXPORT jboolean JNICALL
 Java_SdBridge_loadBionicLibrary(JNIEnv* env, jclass cls, jstring jpath, jstring jdirs) {
@@ -226,6 +227,11 @@ Java_SdBridge_loadBionicLibrary(JNIEnv* env, jclass cls, jstring jpath, jstring 
                     return JNI_FALSE;
                 }
                 set_paths(private_system_font_path);
+                if (sd_import_host_product_properties(gh) < 0) {
+                    (*env)->ReleaseStringUTFChars(env, jpath, path);
+                    (*env)->ReleaseStringUTFChars(env, jdirs, dirs);
+                    return JNI_FALSE;
+                }
                 sd_import_host_hardware_properties(gh);
                 fprintf(stderr, "SDBRIDGE private native font root=%s\n", g_system_root);
             }

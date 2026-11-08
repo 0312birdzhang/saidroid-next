@@ -103,7 +103,19 @@ public final class SdInputMethods implements InvocationHandler,SdMaliit.Listener
         ExtractedTextRequest request=new ExtractedTextRequest();request.hintMaxChars=2048;request.hintMaxLines=20;c.context.getExtractedText(request,0,++extractSequence,callback);
     }
     private void show(Client c,boolean visible,ResultReceiver receiver){c.wantsShow=visible;c.receiver=receiver;if(!visible){if(!SdMaliit.connected()||keyboardHeight==0){if(receiver!=null)receiver.send(1,null);c.receiver=null;}else SdMaliit.show(false);return;}SdMaliit.start(this);widget(c,false);if(SdMaliit.connected())SdMaliit.show(true);}
-    private void finish(Client c){if(c==focused){show(c,false,null);if(c.context!=null)try{c.context.finishComposingText();}catch(RemoteException ignored){}c.surrounding="";c.editor=null;focused=null;generation++;syncDismiss();}}
+    private void finish(Client c){
+        if(c!=focused)return;
+        IInputContext context=c.context;
+        // Finishing composition can synchronously report selection and re-enter
+        // finishInput. Retire this editor before calling its input connection.
+        focused=null;
+        c.editor=null;
+        c.surrounding="";
+        generation++;
+        show(c,false,null);
+        syncDismiss();
+        if(context!=null)try{context.finishComposingText();}catch(RemoteException ignored){}
+    }
     public static void hostFocus(boolean active){instance.hostActive=active;instance.syncDismiss();Client c=instance.focused;if(c==null||c.editor==null)return;if(active){instance.widget(c,true);if(c.wantsShow)SdMaliit.show(true);}else{instance.widget(c,true);SdMaliit.show(false);}}
     @Override public Object invoke(Object p,Method m,Object[] a)throws Throwable{
         String n=m.getName();if(n.equals("asBinder"))return binder;if(n.equals("toString"))return "SailDroid Maliit input methods";if(n.equals("hashCode"))return System.identityHashCode(p);if(n.equals("equals"))return p==a[0];
