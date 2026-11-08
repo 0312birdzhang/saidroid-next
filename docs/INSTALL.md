@@ -56,6 +56,8 @@ SAILDROID_DISPLAY_HEIGHT=2340
 
 Android 9（API 28）底包上 `libsdhost29.so` 会把 ART 自带的 `libjavacore.so`/`libopenjdk*.so` 交给 glibc 加载，以匹配随包发布的 Java 核心。WebView 的 Qt/WPE 宿主不接受初始高度大于 2160，运行时已将宿主尺寸限制为 2160。
 
+机型/厂商等公开身份不是运行时写死的：`scripts/api29/capture-hardware-identity-phone.py` 在目标机上抓取公开字段，打包时经 `package-component.py --hardware-profile` 写入组件 `build.prop`。Sailfish 硬件 ID 与 Android 底包 `ro.product.device` 不一致的端口在 `scripts/api29/hardware-identity-aliases.json` 登记别名（如 `fajita → OnePlus6T`）；无法确认一致身份时保留编译期默认值。
+
 ## 开发认证
 
 设备脚本默认使用 SSH 别名 `bonito`。自行配置 SSH 密钥，或在执行需要 `sshpass` 的历史开发脚本前提供环境变量 `SSHPASS`。公开源码和公开修订包都不携带调试密码或签名私钥。

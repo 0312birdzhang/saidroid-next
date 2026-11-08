@@ -3,7 +3,7 @@ from pathlib import Path
 import copy
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hardware_identity import apply_identity, select_identity, FIELDS, SCHEMA
+from hardware_identity import apply_identity, load_aliases, select_identity, FIELDS, SCHEMA
 from component_properties import properties
 
 profile = dict(schema=SCHEMA, hardware_device='device-xl', boot_hardware='device-xl',
@@ -38,4 +38,15 @@ fallback = copy.deepcopy(profile)
 fallback['properties'] = {k: v for k, v in profile['properties'].items() if '.vendor.' not in k}
 fallback['hardware_device'] = fallback['boot_hardware'] = 'device'
 assert select_identity(fallback)[0]['ro.product.model'] == 'Phone'
-print('HARDWARE_IDENTITY=passed|coherent_group|hardware_confirmation|unrelated_properties_preserved|invalid_rejected')
+alias_profile = dict(schema=SCHEMA, hardware_device='fajita', boot_hardware='qcom', properties={})
+for field, value in zip(FIELDS, ('OnePlus', 'OnePlus', 'ONEPLUS A6013', 'OnePlus6T', 'OnePlus6T')):
+    alias_profile['properties']['ro.product.' + field] = value
+try:
+    select_identity(alias_profile, {})
+except ValueError:
+    pass
+else:
+    raise AssertionError('port_alias_required')
+assert select_identity(alias_profile, {'fajita': ['OnePlus6T']})[0]['ro.product.device'] == 'OnePlus6T'
+assert load_aliases()['fajita'] == ['OnePlus6T']
+print('HARDWARE_IDENTITY=passed|coherent_group|hardware_confirmation|unrelated_properties_preserved|invalid_rejected|port_alias')
