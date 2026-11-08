@@ -12,6 +12,7 @@
 #include <vector>
 namespace fs=std::filesystem;
 extern "C" int sd_import_host_product_properties(void *private_libc);
+extern "C" int sd_import_host_timezone_properties(void *private_libc, char timezone[92]);
 struct prop_info;
 static void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 static void trusted(const fs::path& path,bool directory){
@@ -59,6 +60,8 @@ int main(int argc,char**argv){try{
  }
  void* handle=dlopen(library.c_str(),RTLD_NOW|RTLD_LOCAL);require(handle!=nullptr,dlerror());
  require(sd_import_host_product_properties(handle)>=0,"Host product property import failed");
+ char timezone[92]{};
+ require(sd_import_host_timezone_properties(handle,timezone)>=0,"Host timezone import failed");
  auto get=reinterpret_cast<int(*)(const char*,char*)>(dlsym(handle,"bionic___system_property_get"));
  auto each=reinterpret_cast<int(*)(void(*)(const prop_info*,void*),void*)>(dlsym(handle,"bionic___system_property_foreach"));
  auto read=reinterpret_cast<int(*)(const prop_info*,char*,char*)>(dlsym(handle,"bionic___system_property_read"));

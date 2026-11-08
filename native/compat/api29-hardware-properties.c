@@ -1,8 +1,12 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #ifndef SD_HOST_PROPERTY_LIBRARY
 #define SD_HOST_PROPERTY_LIBRARY "/usr/lib64/libhybris-common.so.1"
@@ -11,6 +15,84 @@
 #ifndef SD_HOST_HARDWARE_FILE
 #define SD_HOST_HARDWARE_FILE "/etc/hw-release"
 #endif
+
+#ifndef SD_HOST_LOCALTIME_FILE
+#define SD_HOST_LOCALTIME_FILE "/etc/localtime"
+#endif
+
+#ifndef SD_HOST_ZONEINFO_DIRECTORY
+#define SD_HOST_ZONEINFO_DIRECTORY "/usr/share/zoneinfo"
+#endif
+
+static pthread_mutex_t timezone_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Timed resolves the selected zone through /etc/localtime. Its intermediate
+ * link is user-owned on Sailfish, while the resolved TZif data is system-owned.
+ * Keep the IANA identifier so fractional offsets and daylight saving rules are
+ * selected from the component's timezone database. */
+int sd_import_host_timezone_properties(void *private_libc, char timezone[92]) {
+    char path[PATH_MAX], directory[PATH_MAX];
+    struct stat info;
+    timezone[0] = '\0';
+    if (!realpath(SD_HOST_LOCALTIME_FILE, path) ||
+        !realpath(SD_HOST_ZONEINFO_DIRECTORY, directory))
+        return 0;
+    size_t prefix = strlen(directory);
+    if (strncmp(path, directory, prefix) || path[prefix] != '/' ||
+        stat(path, &info) || !S_ISREG(info.st_mode) ||
+        info.st_uid != 0 || (info.st_mode & 022))
+        return 0;
+    const char *identifier = path + prefix + 1;
+    if (!strncmp(identifier, "posix/", 6) || !strncmp(identifier, "right/", 6))
+        identifier += 6;
+    size_t length = strlen(identifier);
+    if (!length || length >= 92)
+        return 0;
+    for (size_t index = 0; index < length; ++index) {
+        unsigned char byte = (unsigned char)identifier[index];
+        if (!((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') ||
+              (byte >= '0' && byte <= '9') || strchr("/_+-", byte)))
+            return 0;
+    }
+    FILE *file = fopen(path, "rb");
+    if (!file)
+        return 0;
+    char magic[4];
+    size_t count = fread(magic, 1, sizeof(magic), file);
+    fclose(file);
+    if (count != sizeof(magic) || memcmp(magic, "TZif", sizeof(magic)))
+        return 0;
+    int (*set_private)(const char *, const char *) =
+        dlsym(private_libc, "bionic___system_property_set");
+    int (*get_private)(const char *, char *) =
+        dlsym(private_libc, "bionic___system_property_get");
+    if (!set_private || !get_private)
+        return -1;
+    pthread_mutex_lock(&timezone_lock);
+    char previous[92] = {0};
+    int size = get_private("persist.sys.timezone", previous);
+    int result = -1;
+    if (size >= 0 && size < (int)sizeof(previous) &&
+        strnlen(previous, sizeof(previous)) == (size_t)size) {
+        const char *environment = getenv("TZ");
+        if (!strcmp(previous, identifier) && environment &&
+            !strcmp(environment, identifier)) {
+            result = 1;
+        } else if (!set_private("persist.sys.timezone", identifier)) {
+            if (!setenv("TZ", identifier, 1)) {
+                tzset();
+                fprintf(stderr, "SDTIMEZONE=imported|source=host-localtime|id=%s\n", identifier);
+                result = 1;
+            } else {
+                set_private("persist.sys.timezone", previous);
+            }
+        }
+    }
+    if (result == 1)
+        memcpy(timezone, identifier, length + 1);
+    pthread_mutex_unlock(&timezone_lock);
+    return result;
+}
 
 /* The component's Android properties describe its private userland. Hardware
  * service readiness belongs to the running phone, rather than build.prop.

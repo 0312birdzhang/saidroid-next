@@ -187,9 +187,14 @@ public final class SdWindowSession implements InvocationHandler {
         if(n.equals("getWindowId")){Window w=windows.get((IBinder)a[0]);if(w==null)throw new IllegalArgumentException("Unknown window token");return w.id;}
         if(n.equals("outOfMemory")){window(a[0]);return false;}
         if(n.equals("performHapticFeedback")){
-            // API29 IWindowSession takes (int effectId, boolean always), with
-            // no IWindow parameter. The host exposes no vibrator backend.
-            int effectId=(Integer)a[0];boolean always=(Boolean)a[1];
+            // API28 also supplies the requesting IWindow before the effect.
+            int effectIndex = 0;
+            if (a.length == 3) {
+                window(a[0]);
+                effectIndex = 1;
+            }
+            int effectId = (Integer)a[effectIndex];
+            boolean always = (Boolean)a[effectIndex + 1];
             System.err.println("SDWINDOW_SESSION=haptic_feedback|effect="+effectId+"|always="+always+"|supported=false");
             return false;
         }

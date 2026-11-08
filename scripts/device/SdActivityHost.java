@@ -212,8 +212,7 @@ public final class SdActivityHost {
         requestStart(intent,null,null,-1);
     }
     public static void requestStart(final Intent intent,final IBinder resultTo,final String resultWho,final int requestCode){
-        if(PackageManager.ACTION_REQUEST_PERMISSIONS.equals(intent.getAction())
-                &&PERMISSION_CONTROLLER_PACKAGE.equals(intent.getPackage())){
+        if(SdPermissionController.accepts(intent)||SdPermissionController.acceptsSettings(intent)){
             requestPermissions(intent,resultTo,resultWho,requestCode);return;
         }
         if(SdApkPackage.resolveActivities(intent,intent.getType(),0).isEmpty())throw new ActivityNotFoundException(intent.toString());
@@ -222,31 +221,29 @@ public final class SdActivityHost {
         post(new Runnable(){public void run(){try{launch(snapshot,resultTo,resultWho,requestCode);}catch(Exception e){throw new IllegalStateException("Activity launch failed",e);}}});
     }
     private static void requestPermissions(Intent intent,final IBinder token,final String who,final int requestCode){
-        final Entry caller=find(token);
-        if(requestCode<0)throw new IllegalArgumentException("Permission request requires a result callback");
-        String[] requested=intent.getStringArrayExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES);
-        if(requested==null)throw new IllegalArgumentException("Permission names are required");
-        final String[] names=requested.clone();
-        for(String name:names)if(name==null||name.isEmpty())throw new IllegalArgumentException("Permission name is empty");
+        final boolean settings=SdPermissionController.acceptsSettings(intent);
+        final Entry caller=token!=null?find(token):settings&&!stack.isEmpty()?stack.get(stack.size()-1):null;
+        if(caller==null)throw new SecurityException("Permission dialog requires a hosted Activity");
+        if(!settings&&(requestCode<0||who==null||!who.startsWith("@android:requestPermissions:")))throw new SecurityException("Permission request requires an Activity result owner");
+        final Intent snapshot=new Intent(intent);
         post(new Runnable(){public void run(){
             if(!stack.contains(caller))return;
             ActivityThread thread=ActivityThread.currentActivityThread();
-            if(thread.getActivityClient(token)==null)return;
-            Activity target=thread.getActivity(token);
+            if(thread.getActivityClient(caller.token)==null)return;
+            Activity target=thread.getActivity(caller.token);
             if(target==null||target.isFinishing())return;
-            int[] grants=new int[names.length];
-            try{
-                for(int index=0;index<names.length;index++)grants[index]=SdPackageManagerService.service().checkPermission(names[index],caller.info.packageName,android.os.Process.myUid()/100000);
-            }catch(RemoteException failure){throw new IllegalStateException("Permission result query failed",failure);}
-            Intent result=new Intent().putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES,names)
-                    .putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_RESULTS,grants);
-            ArrayList<ResultInfo> results=new ArrayList<ResultInfo>();
-            results.add(new ResultInfo(who,requestCode,Activity.RESULT_OK,result));
-            // Return the existing manifest-derived grants. Dangerous host
-            // permissions retain their denied state until a grant backend exists.
-            thread.handleSendResult(token,results,"SailDroid permission request completed");
-            System.err.println("SDPERMISSIONS=result_delivered|count="+names.length+"|source=existing-grants");
+            if(settings){pause(caller);SdPermissionController.showSettings(target,caller.token,who,requestCode);}
+            else SdPermissionController.request(target,caller.token,snapshot,who,requestCode);
         }});
+    }
+    public static void permissionSettingsClosed(IBinder token,String who,int requestCode){
+        Entry caller=null;for(Entry entry:stack)if(entry.token==token)caller=entry;
+        if(caller==null||caller.activity==null||caller.activity.isFinishing())return;
+        if(requestCode>=0){
+            ArrayList<ResultInfo> results=new ArrayList<ResultInfo>();results.add(new ResultInfo(who,requestCode,Activity.RESULT_OK,null));
+            ActivityThread.currentActivityThread().handleSendResult(token,results,"SailDroid application permissions closed");
+        }
+        if(hostVisible&&isTop(token))resume(caller);
     }
     public static void openInstallerFile(android.net.Uri uri){
         if(!"org.saildroid.manager".equals(SdApkPackage.NAME))throw new IllegalStateException("Installer Activity unavailable");
@@ -310,7 +307,7 @@ public final class SdActivityHost {
         if(System.getenv("SAILDROID_ANDROID_LOG_STDERR")!=null)new Throwable("SDACTIVITY=finish_requested|class="+e.info.name).printStackTrace();
         post(new Runnable(){public void run(){
             if(!stack.contains(e))return;
-            boolean top=isTop(token);pause(e);
+            boolean top=isTop(token);SdPermissionController.cancel(token);pause(e);
             Entry revealed=null;
             if(top&&revealPrevious&&stack.size()>1)revealed=stack.get(stack.size()-2);
             // The revealed Activity must start/resume before the finishing one
@@ -338,7 +335,7 @@ public final class SdActivityHost {
         ActivityThread thread=ActivityThread.currentActivityThread();
         for(Entry entry:stack)if(entry.activity==null){closeWhenReady=true;return;}
         while(!stack.isEmpty()){
-            Entry e=stack.get(stack.size()-1);pause(e);
+            Entry e=stack.get(stack.size()-1);SdPermissionController.cancel(e.token);pause(e);
             if(e.remoteResult!=null)try{SdRemoteActivities.finish(e.remoteResult,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
             stop(e);thread.handleDestroyActivity(e.token,true,0,false,"Sailfish task closed");stack.remove(e);
         }

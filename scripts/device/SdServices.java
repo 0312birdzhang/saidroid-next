@@ -66,6 +66,14 @@ public final class SdServices {
 
     public static SdActivityManagerService activityManager(){if(!installed)throw new IllegalStateException("Services not installed");return activityManager;}
 
+    static void notifyTimeZoneChanged(String identifier) throws Exception {
+        if (!installed) return;
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_TIMEZONE_CHANGED);
+        intent.putExtra("time-zone", identifier);
+        activityManager.deliverBroadcast(intent, null, 0, null, null, null,
+                android.os.Process.myUid() / 100000, false);
+    }
+
     public static void bindApplication(android.content.pm.ApplicationInfo info) {
         if (!installed) throw new IllegalStateException("Services are not installed");
         android.content.pm.ApplicationInfo current=new android.content.pm.ApplicationInfo(info);current.processName=SdApkPackage.processName();activityManager.bindApplication(current);

@@ -19,6 +19,7 @@ typedef void  (*dl_parse_t)(const char*, char*);
 
 static JavaVM* g_vm = NULL;
 static void*   g_handle = NULL;
+static void*   g_private_libc = NULL;
 static char    g_libdir[1024] = {0};
 static char    g_system_root[1024] = "/home/art";
 static jclass software_graphics_class;
@@ -173,6 +174,20 @@ void bionic_free_malloc_leak_info(uint8_t *info) { free(info); }
 
 extern int sd_import_host_hardware_properties(void *private_libc);
 extern int sd_import_host_product_properties(void *private_libc);
+extern int sd_import_host_timezone_properties(void *private_libc, char timezone[92]);
+
+JNIEXPORT jstring JNICALL
+Java_SdTimeZone_refreshNative(JNIEnv *env, jclass cls) {
+    (void)cls;
+    char timezone[92];
+    int result = g_private_libc ? sd_import_host_timezone_properties(g_private_libc, timezone) : -1;
+    if (result < 0) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalStateException"),
+                        "Host timezone import failed");
+        return NULL;
+    }
+    return result ? (*env)->NewStringUTF(env, timezone) : NULL;
+}
 
 JNIEXPORT jboolean JNICALL
 Java_SdBridge_loadBionicLibrary(JNIEnv* env, jclass cls, jstring jpath, jstring jdirs) {
@@ -233,6 +248,13 @@ Java_SdBridge_loadBionicLibrary(JNIEnv* env, jclass cls, jstring jpath, jstring 
                     return JNI_FALSE;
                 }
                 sd_import_host_hardware_properties(gh);
+                g_private_libc = gh;
+                char timezone[92];
+                if (sd_import_host_timezone_properties(gh, timezone) < 0) {
+                    (*env)->ReleaseStringUTFChars(env, jpath, path);
+                    (*env)->ReleaseStringUTFChars(env, jdirs, dirs);
+                    return JNI_FALSE;
+                }
                 fprintf(stderr, "SDBRIDGE private native font root=%s\n", g_system_root);
             }
         }
@@ -508,6 +530,13 @@ Java_SdBridge_registerFrameworkNatives(JNIEnv* env, jclass cls) {
         if((*env)->RegisterNatives(env,(*env)->FindClass(env,"libcore/io/IoUtils"),&ownership,1)<0)return -15;
         JNINativeMethod heap={"getUnreachableMemory","(IZ)Ljava/lang/String;",unavailable_unreachable_memory};
         if((*env)->RegisterNatives(env,(*env)->FindClass(env,"android/os/Debug"),&heap,1)<0)return -13;
+        jclass timezone = (*env)->FindClass(env, "SdTimeZone");
+        if (!timezone) return -19;
+        jmethodID install_timezone = (*env)->GetStaticMethodID(env, timezone, "install", "()V");
+        if (!install_timezone) return -19;
+        (*env)->CallStaticVoidMethod(env, timezone, install_timezone);
+        (*env)->DeleteLocalRef(env, timezone);
+        if ((*env)->ExceptionCheck(env)) return -19;
         return ok;
     }
     JNINativeMethod cache[]={{"setupShadersDiskCache","(Ljava/lang/String;)V",software_shader_cache}};
