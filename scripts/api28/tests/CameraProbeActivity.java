@@ -105,50 +105,69 @@ public final class CameraProbeActivity extends Activity {
             int cameras = Camera.getNumberOfCameras();
             require(cameras > 0, "Camera inventory missing");
             boolean[] covered = new boolean[2];
+            int[] selected = {-1, -1};
             for (int id = 0; id < cameras; id++) {
                 Camera.CameraInfo info = new Camera.CameraInfo();
                 Camera.getCameraInfo(id, info);
                 require(info.facing >= 0 && info.facing < covered.length, "Unknown camera facing");
-                if (covered[info.facing]) continue;
-                int[] names = new int[1];
-                GLES20.glGenTextures(1, names, 0);
-                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, names[0]);
-                SurfaceTexture texture = new SurfaceTexture(names[0]);
-                Camera camera = null;
-                boolean started = false;
-                Semaphore available = new Semaphore(0);
-                texture.setOnFrameAvailableListener(value -> available.release(), new Handler(events.getLooper()));
-                try {
-                    camera = Camera.open(id);
-                    Camera.Parameters parameters = camera.getParameters();
-                    Camera.Size size = parameters.getSupportedPreviewSizes().get(0);
-                    parameters.setPreviewSize(size.width, size.height);
-                    camera.setParameters(parameters);
-                    texture.setDefaultBufferSize(size.width, size.height);
-                    camera.setPreviewTexture(texture);
-                    camera.setDisplayOrientation(90);
-                    camera.startPreview();
-                    started = true;
-                    long timestamp = 0;
-                    for (int frame = 0; frame < 12; frame++) {
-                        require(available.tryAcquire(10, TimeUnit.SECONDS), "Preview frame timeout, camera " + id);
-                        available.drainPermits();
-                        texture.updateTexImage();
-                        require(texture.getTimestamp() > timestamp, "Camera frame timestamp did not advance");
-                        timestamp = texture.getTimestamp();
-                        require(GLES20.glGetError() == GLES20.GL_NO_ERROR, "Camera texture GL error");
+                if (selected[info.facing] < 0) selected[info.facing] = id;
+            }
+            require(selected[0] >= 0 && selected[1] >= 0, "Front/back inventory missing");
+            int[] names = new int[1];
+            GLES20.glGenTextures(1, names, 0);
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, names[0]);
+            SurfaceTexture texture = new SurfaceTexture(names[0]);
+            Semaphore available = new Semaphore(0);
+            texture.setOnFrameAvailableListener(value -> available.release(), new Handler(events.getLooper()));
+            try {
+                for (int id : new int[]{selected[0], selected[1], selected[0]}) {
+                    Camera.CameraInfo info = new Camera.CameraInfo();
+                    Camera.getCameraInfo(id, info);
+                    available.drainPermits();
+                    Camera camera = null;
+                    boolean started = false;
+                    long began = android.os.SystemClock.uptimeMillis();
+                    try {
+                        camera = Camera.open(id);
+                        Camera.Parameters parameters = camera.getParameters();
+                        Camera.Size size = parameters.getSupportedPreviewSizes().get(0);
+                        parameters.setPreviewSize(size.width, size.height);
+                        camera.setParameters(parameters);
+                        texture.setDefaultBufferSize(size.width, size.height);
+                        camera.setPreviewTexture(texture);
+                        camera.setDisplayOrientation(90);
+                        camera.startPreview();
+                        started = true;
+                        long timestamp = 0;
+                        for (int frame = 0; frame < 12; frame++) {
+                            require(available.tryAcquire(10, TimeUnit.SECONDS), "Preview frame timeout, camera " + id);
+                            available.drainPermits();
+                            texture.updateTexImage();
+                            require(texture.getTimestamp() > timestamp, "Camera frame timestamp did not advance");
+                            timestamp = texture.getTimestamp();
+                            if (frame == 0) System.err.println("API28_CAMERA=first_frame|id=" + id
+                                    + "|elapsed_ms=" + (android.os.SystemClock.uptimeMillis() - began));
+                            require(GLES20.glGetError() == GLES20.GL_NO_ERROR, "Camera texture GL error");
+                        }
+                        System.err.println("API28_CAMERA=preview|id=" + id + "|frames=12|size="
+                                + size.width + "x" + size.height + "|orientation=90|timestamp=" + timestamp);
+                        covered[info.facing] = true;
+                        // Leave frames pending across release and reconnect. The
+                        // consumer must receive notifications from the next camera.
+                        Thread.sleep(500);
+                    } finally {
+                        long releasing = android.os.SystemClock.uptimeMillis();
+                        if (camera != null) {
+                            try { if (started) camera.stopPreview(); }
+                            finally { camera.release(); }
+                        }
+                        require(android.os.SystemClock.uptimeMillis() - releasing < 2000,
+                                "Camera release blocked while preview was unconsumed");
                     }
-                    System.err.println("API28_CAMERA=preview|id=" + id + "|frames=12|size="
-                            + size.width + "x" + size.height + "|orientation=90|timestamp=" + timestamp);
-                    covered[info.facing] = true;
-                } finally {
-                    if (camera != null) {
-                        try { if (started) camera.stopPreview(); }
-                        finally { camera.release(); }
-                    }
-                    texture.release();
-                    GLES20.glDeleteTextures(1, names, 0);
                 }
+            } finally {
+                texture.release();
+                GLES20.glDeleteTextures(1, names, 0);
             }
             require(covered[Camera.CameraInfo.CAMERA_FACING_BACK] && covered[Camera.CameraInfo.CAMERA_FACING_FRONT],
                     "Front/back preview coverage missing");
