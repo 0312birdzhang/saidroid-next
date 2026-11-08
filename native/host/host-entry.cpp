@@ -140,9 +140,12 @@ static void environment(const fs::path &root) {
   env("SD_BUILD_PROP", root / "build.prop");
   env("BIONIC_TRANSLATION_CONFIG_DIR", root / "linker-config");
   env("SAILDROID_STRICT_LINK", "1");
-  std::string preload;
+  // The Android linker resolves allocator/mapper hooks while loading libui.
+  // Publish the component's gralloc wrappers before that first resolution.
+  trusted(root / "lib/libsdtexture-host.so");
+  std::string preload = (root / "lib/libsdtexture-host.so").string() + ":";
   if (fs::exists(root / "lib/libpthread_bio.so.0"))
-    preload = (root / "lib/libpthread_bio.so.0").string() + ":";
+    preload += (root / "lib/libpthread_bio.so.0").string() + ":";
   if (fs::exists(root / "lib/libsdstrictmath-fdlibm.so")) {
     trusted(root / "lib/libsdstrictmath-fdlibm.so");
     preload += (root / "lib/libsdstrictmath-fdlibm.so").string() + ":";
