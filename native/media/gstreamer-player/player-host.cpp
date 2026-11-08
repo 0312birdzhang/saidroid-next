@@ -192,9 +192,15 @@ extern "C" JNIEXPORT void JNICALL Java_SdMediaPlayer_nativeInstall(JNIEnv*e,jcla
  }
  if(e->RegisterNatives(mp_class,methods,sizeof(methods)/sizeof(methods[0]))<0)return;
  if(!install_retriever(e))return;
- {jclass strategy=e->FindClass("android/media/audiopolicy/AudioProductStrategy");if(!strategy)return;
-  JNINativeMethod policy[]={ {(char*)"native_list_audio_product_strategies",(char*)"(Ljava/util/ArrayList;)I",(void*)list_product_strategies} };
-  if(e->RegisterNatives(strategy,policy,1)<0)return;
+ {jclass version=e->FindClass("android/os/Build$VERSION");if(!version)return;
+  jint sdk=e->GetStaticIntField(version,e->GetStaticFieldID(version,"SDK_INT","I"));
+  e->DeleteLocalRef(version);
+  if(sdk>=29){
+   jclass strategy=e->FindClass("android/media/audiopolicy/AudioProductStrategy");if(!strategy)return;
+   JNINativeMethod policy[]={ {(char*)"native_list_audio_product_strategies",(char*)"(Ljava/util/ArrayList;)I",(void*)list_product_strategies} };
+   int registered=e->RegisterNatives(strategy,policy,1);e->DeleteLocalRef(strategy);
+   if(registered<0)return;
+  }
  }
  fprintf(stderr,"SDMEDIA=installed|backend=gstreamer|native_methods=%zu|surface=android-bufferqueue|audio=pulseaudio\n",sizeof(methods)/sizeof(methods[0]));return;
 failed:if(!e->ExceptionCheck())fail(e,"java/lang/IllegalStateException","MediaPlayer host backend installation failed");
