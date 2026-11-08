@@ -70,7 +70,10 @@ public final class MediaMetadataActivity extends Activity {
                     require(width > 0 && height > 0, "Video dimensions missing");
                     require(Long.parseLong(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)) > 0, "Video duration missing");
                     Bitmap frame = retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 160, 120);
-                    require(frame != null && frame.getWidth() == 160 && frame.getHeight() == 120, "Video thumbnail missing");
+                    require(frame != null && frame.getWidth() > 0 && frame.getWidth() <= 160
+                            && frame.getHeight() > 0 && frame.getHeight() <= 120, "Video thumbnail missing");
+                    require(Math.abs((long) frame.getWidth() * height - (long) frame.getHeight() * width)
+                            <= Math.max(width, height), "Video thumbnail aspect ratio differs");
                     frame.recycle();
                     Uri item = Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, rows.getString(0));
                     retriever.setDataSource(this, item);

@@ -237,6 +237,9 @@ static jobject frame(JNIEnv* env, jobject self, jlong time, jint option, jint wi
     if (colors && !env->ExceptionCheck())
         result = env->CallStaticObjectMethod(bitmap, env->GetStaticMethodID(bitmap, "createBitmap", "([IIILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;"), colors, source_width, source_height, argb);
     if (result && width > 0 && height > 0 && (width != source_width || height != source_height)) {
+        double scale = std::min(double(width) / source_width, double(height) / source_height);
+        width = std::max(1, int(source_width * scale));
+        height = std::max(1, int(source_height * scale));
         jobject scaled = env->CallStaticObjectMethod(bitmap, env->GetStaticMethodID(bitmap, "createScaledBitmap", "(Landroid/graphics/Bitmap;IIZ)Landroid/graphics/Bitmap;"), result, width, height, JNI_TRUE);
         env->DeleteLocalRef(result);
         result = scaled;
