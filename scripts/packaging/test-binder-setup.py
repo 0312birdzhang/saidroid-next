@@ -34,6 +34,7 @@ class BinderSetupTests(unittest.TestCase):
         self.module.TARGET = self.module.DIRECTORY / 'binder'
         self.module.METADATA = self.module.DIRECTORY / 'provision.json'
         (self.root / 'home/art').mkdir(parents=True)
+        (self.root / 'home/art').chmod(0o755)
         self.mounts = {}
         self.precreated = True
         self.protocol = 8
@@ -122,6 +123,47 @@ class BinderSetupTests(unittest.TestCase):
         self.assertEqual(self.additions, 1)
         self.assertTrue(stat.S_ISCHR(self.module.TARGET.stat().st_mode))
 
+    def test_restrictive_umask_and_repeated_execution(self):
+        runtime = self.module.DIRECTORY.parent
+        runtime.mkdir(mode=0o700)
+        os.chown(runtime, self.account.pw_uid, self.account.pw_gid)
+        previous = os.umask(0o077)
+        try:
+            self.provision()
+            before = self.module.TARGET.stat()
+            self.provision()
+            after = self.module.TARGET.stat()
+        finally:
+            os.umask(previous)
+        for directory in (runtime, self.module.DIRECTORY):
+            self.assertEqual(directory.stat().st_uid, 0)
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o755)
+        self.assertEqual((before.st_dev, before.st_ino), (after.st_dev, after.st_ino))
+
+    def test_restrictive_umask_mount_failure_can_be_retried(self):
+        def fail_mount(command, check):
+            raise subprocess.CalledProcessError(1, command)
+
+        previous = os.umask(0o077)
+        try:
+            with patch.object(self.module.subprocess, 'run', fail_mount):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self.provision()
+        finally:
+            os.umask(previous)
+        for directory in (self.module.DIRECTORY.parent, self.module.DIRECTORY):
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o755)
+        self.assertFalse(self.mounts)
+        self.provision()
+        self.assertEqual(json.loads(self.module.METADATA.read_text())['protocol'], 8)
+
+    def test_existing_root_directory_mode_is_not_silently_changed(self):
+        path = self.root / 'existing-root-directory'
+        path.mkdir(mode=0o700)
+        with self.assertRaisesRegex(RuntimeError, 'Untrusted directory'):
+            self.module.root_directory(path, 0o755)
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+
     def test_directory_preflight_preserves_ownership_on_failure(self):
         self.module.DIRECTORY.mkdir(parents=True)
         for directory in (self.module.DIRECTORY.parent, self.module.DIRECTORY):
@@ -154,6 +196,8 @@ class BinderSetupTests(unittest.TestCase):
 
     def test_linked_target_preserved_and_rejected(self):
         self.module.DIRECTORY.mkdir(parents=True)
+        for directory in (self.module.DIRECTORY.parent, self.module.DIRECTORY):
+            directory.chmod(0o755)
         self.module.TARGET.symlink_to('/dev/null')
         with self.assertRaisesRegex(RuntimeError, 'Unexpected existing Binder target'):
             self.provision()
@@ -161,6 +205,8 @@ class BinderSetupTests(unittest.TestCase):
 
     def test_external_provisioning_preserved(self):
         self.module.DIRECTORY.mkdir(parents=True)
+        for directory in (self.module.DIRECTORY.parent, self.module.DIRECTORY):
+            directory.chmod(0o755)
         self.device(self.module.TARGET)
         os.chown(self.module.TARGET, self.account.pw_uid, self.account.pw_gid)
         self.module.METADATA.write_text('{"schema":"external-device"}\n')

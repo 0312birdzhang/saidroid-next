@@ -139,6 +139,13 @@ with fixture()as host:
  finally:child.terminate();child.wait(timeout=10)
  record('rpm-preinstall-blocks-overwriting-a-running-runtime')
 with fixture()as host:
+ a=release(host,'api29-a');previous=os.umask(0o077)
+ try:action(host,'change','api29-a')
+ finally:os.umask(previous)
+ for path,owner,mode in (('/home/art',0,0o755),('/home/art/bin',0,0o755),(m.STATE,0,0o700),('/home/art/data',65534,0o700)):
+  info=host.path(path).stat();assert info.st_uid==owner and stat.S_IMODE(info.st_mode)==mode
+ record('restrictive-umask-storage-modes')
+with fixture()as host:
  a=release(host,'api29-a');b=release(host,'api29-b');c=release(host,'api29-c')
  assert action(host,'status')['active_link']is None
  action(host,'change','api29-a');assert os.readlink(host.path('/home/art/api29-root'))==str(a)

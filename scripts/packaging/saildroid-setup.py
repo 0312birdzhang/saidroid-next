@@ -396,7 +396,13 @@ class Setup:
                     'Existing storage ownership differs: ' + str(path))
             return path
         path.mkdir(mode=mode)
-        os.chown(path, owner, self.account['gid'] if owner else 0)
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            require(os.fstat(descriptor).st_uid == 0, 'Untrusted new storage directory: ' + str(path))
+            os.fchown(descriptor, owner, self.account['gid'] if owner else 0)
+            os.fchmod(descriptor, mode)
+        finally:
+            os.close(descriptor)
         return path
 
     def prepare(self, binder=True):
