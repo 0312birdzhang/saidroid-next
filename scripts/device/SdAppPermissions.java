@@ -126,6 +126,7 @@ public final class SdAppPermissions {
     public boolean supported(String name) {
         if (!SdApkPackage.NAME.equals(owner) || !canRequest(name)) return false;
         if ("android.permission.CAMERA".equals(name)) return SdCamera.available();
+        if ("android.permission.RECORD_AUDIO".equals(name)) return SdAudio.recordingAvailable();
         boolean write = "android.permission.WRITE_EXTERNAL_STORAGE".equals(name);
         if (!write && !"android.permission.READ_EXTERNAL_STORAGE".equals(name)) return false;
         String shared = System.getenv("EXTERNAL_STORAGE");

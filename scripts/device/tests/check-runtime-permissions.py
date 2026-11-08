@@ -86,6 +86,17 @@ public final class RuntimePermissionsProbe {
         System.setProperty("test.camera","true");first.decide(choice(CAMERA,true));
         System.setProperty("test.camera","false");check(!first.holds(CAMERA),"Unavailable camera retained usable permission");
         System.setProperty("test.camera","true");
+        System.setProperty("test.microphone","true");
+        check(first.supported(MIC)&&!first.holds(MIC),"Available microphone inferred a grant");
+        first.decide(choice(MIC,false));
+        check(!first.holds(MIC)&&first.shouldShowRationale(MIC),"Microphone denial lost");
+        first.decide(choice(MIC,true));
+        check(state().holds(MIC),"Microphone choice not retained");
+        System.setProperty("test.microphone","false");
+        check(!first.holds(MIC),"Unavailable microphone retained usable permission");
+        System.setProperty("test.microphone","true");
+        other.decide(choice(MIC,false));
+        check(!first.holds(MIC),"Microphone revocation did not propagate");
         String java=System.getProperty("java.home")+"/bin/java",classpath=System.getProperty("java.class.path");
         ArrayList<String> base=new ArrayList<String>(Arrays.asList(java,"-Dtest.apk="+SdApkPackage.APK,"-Dtest.data="+SdApkPackage.DATA,"-Dtest.camera=true","-cp",classpath,"RuntimePermissionsProbe"));
         ArrayList<String> read=new ArrayList<String>(base),camera=new ArrayList<String>(base);read.add(READ);camera.add(CAMERA);
@@ -141,6 +152,7 @@ def main():
             'android/os/Build.java': 'package android.os; public final class Build { public static final class VERSION { public static final int SDK_INT=28; } }',
             'SdApkPackage.java': 'public final class SdApkPackage { public static final String NAME="org.example.permissions", APK=System.getProperty("test.apk"), DATA=System.getProperty("test.data"); }',
             'SdCamera.java': 'public final class SdCamera { public static boolean available() { return Boolean.getBoolean("test.camera"); } }',
+            'SdAudio.java': 'public final class SdAudio { public static boolean recordingAvailable() { return Boolean.getBoolean("test.microphone"); } }',
             'RuntimePermissionsProbe.java': PROBE,
         }
         sources = []

@@ -57,7 +57,7 @@ void sink(pa_context*,const pa_sink_info *info,int end,void *data){
   };
   query.result["outputs"].push_back(row);
 }
-void source(pa_context*,const pa_source_info *i,int end,void *data){if(end||!i||i->monitor_of_sink!=PA_INVALID_INDEX)return;auto&q=*(Query*)data;Json row={{"id",i->index},{"name",i->name?i->name:""},{"description",i->description?i->description:""},{"rate",i->sample_spec.rate},{"channels",i->sample_spec.channels},{"muted",bool(i->mute)},{"active",i->state==PA_SOURCE_RUNNING},{"default",q.default_source==(i->name?i->name:"")}};q.result["inputs"].push_back(row);}
+void source(pa_context*,const pa_source_info *i,int end,void *data){if(end||!i||i->monitor_of_sink!=PA_INVALID_INDEX)return;auto&q=*(Query*)data;Json row={{"id",i->index},{"name",i->name?i->name:""},{"description",i->description?i->description:""},{"rate",i->sample_spec.rate},{"channels",i->sample_spec.channels},{"muted",bool(i->mute)},{"active",i->state==PA_SOURCE_RUNNING},{"default",q.default_source==(i->name?i->name:"")},{"physical",bool(i->flags&PA_SOURCE_HARDWARE)}};q.result["inputs"].push_back(row);}
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_saildroid_host_HostApi_audioSnapshot(JNIEnv*e,jclass){
  try{Query q;q.wait(pa_context_get_server_info(q.context,server,&q));q.wait(pa_context_get_sink_info_list(q.context,sink,&q));q.wait(pa_context_get_source_info_list(q.context,source,&q));return e->NewStringUTF(q.result.dump().c_str());}

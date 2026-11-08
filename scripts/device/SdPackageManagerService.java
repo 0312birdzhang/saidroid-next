@@ -102,6 +102,7 @@ public final class SdPackageManagerService implements InvocationHandler {
         }
         if(n.equals("hasSystemFeature")){
             String feature=(String)a[0];
+            if ("android.hardware.microphone".equals(feature)) return (Integer)a[1] == 0 && SdAudio.recordingAvailable();
             if((Integer)a[1]!=0||!("android.hardware.camera".equals(feature)||"android.hardware.camera.any".equals(feature)||"android.hardware.camera.front".equals(feature))||!SdCamera.available())return false;
             if("android.hardware.camera.any".equals(feature))return true;
             int facing="android.hardware.camera.front".equals(feature)?android.hardware.Camera.CameraInfo.CAMERA_FACING_FRONT:android.hardware.Camera.CameraInfo.CAMERA_FACING_BACK;

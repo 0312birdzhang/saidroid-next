@@ -4,7 +4,7 @@ import java.lang.reflect.*;
 import java.util.*;
 import org.json.*;
 
-/** Query the running host audio server; Android playback/mixing remains separate. */
+/** Query host audio routes and install the API28 PulseAudio capture bridge. */
 public final class SdAudio implements InvocationHandler {
     private final Binder binder=new Binder();
     private final IAudioService service;
@@ -22,12 +22,30 @@ public final class SdAudio implements InvocationHandler {
             nativeInstall(Class.forName(owner,false,SdAudio.class.getClassLoader()));
         }catch(ClassNotFoundException failure){throw new IllegalStateException("Audio channel constant owner unavailable",failure);}
         SdCamera.install();
+        SdAudioRecord.install();
     }
     private static synchronized JSONObject snapshot()throws Exception{
         long now=SystemClock.uptimeMillis();if(snapshot==null||now-sampled>250){snapshot=new JSONObject(org.saildroid.host.HostApi.audioSnapshot());sampled=now;}return snapshot;
     }
     private static JSONObject output()throws Exception{
         JSONArray outputs=snapshot().getJSONArray("outputs");for(int i=0;i<outputs.length();i++)if(outputs.getJSONObject(i).getBoolean("default"))return outputs.getJSONObject(i);throw new IllegalStateException("Host default audio output unavailable");
+    }
+    static JSONObject recordingInput() throws Exception {
+        JSONArray inputs = snapshot().getJSONArray("inputs");
+        JSONObject fallback = null;
+        for (int index = 0; index < inputs.length(); index++) {
+            JSONObject input = inputs.getJSONObject(index);
+            if (!input.optBoolean("physical")) continue;
+            if (input.getBoolean("default")) return input;
+            if (fallback == null) fallback = input;
+        }
+        if (fallback == null) throw new IllegalStateException("Physical host microphone unavailable");
+        return fallback;
+    }
+    public static boolean recordingAvailable() {
+        if (Build.VERSION.SDK_INT != 28) return false;
+        try { recordingInput(); return true; }
+        catch (Exception unavailable) { return false; }
     }
     public static int primaryOutputSamplingRate()throws Exception{
         int rate=output().getInt("rate");
@@ -62,7 +80,8 @@ public final class SdAudio implements InvocationHandler {
         JSONArray outputs=snapshot().getJSONArray("outputs");for(int i=0;i<outputs.length();i++)if(outputs.getJSONObject(i).getBoolean("active"))return true;return false;
     }
     public static boolean microphoneMuted()throws Exception{
-        JSONArray inputs=snapshot().getJSONArray("inputs");for(int i=0;i<inputs.length();i++)if(inputs.getJSONObject(i).getBoolean("default"))return inputs.getJSONObject(i).getBoolean("muted");return true;
+        if (!recordingAvailable()) return true;
+        return recordingInput().getBoolean("muted");
     }
     public static int listPorts(ArrayList<Object> ports,int[] generation)throws Exception{
         if(ports==null||generation==null||generation.length!=1)throw new IllegalArgumentException("Audio port list arguments");
@@ -73,6 +92,7 @@ public final class SdAudio implements InvocationHandler {
             JSONArray rows=data.getJSONArray(direction);
             for(int i=0;i<rows.length();i++){
                 JSONObject row=rows.getJSONObject(i);boolean input=direction.equals("inputs");int id=row.getInt("id")+(input?0x10000:1);
+                if (input && !row.optBoolean("physical")) continue;
                 String name=row.getString("name");int channels=row.getInt("channels");int type=input?0x80000004:2;
                 // The host route is a physical PulseAudio sink/source, not an
                 // Android mixer port. Profiles expose their actual channel count.
