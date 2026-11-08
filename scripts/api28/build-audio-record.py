@@ -25,6 +25,7 @@ def main():
     repository = module.parents[1]
     names = ['scripts/device/' + name + '.java'
              for name in ('SdAudio', 'SdAudioRecord', 'SdAppPermissions', 'SdPackageManagerService')]
+    names.append('native/media/droid-camera/SdCameraAppOps.java')
     output = arguments.output.resolve()
     assert digest(arguments.framework) == 'cf4aed5e458deb48ddc0ca92fc25156e6f478d9d5c1d948cdd1817a67ee11b32'
     assert digest(arguments.r8) == '59753e70a74f918389cc87f1b7d66b5c0862932559167425708ded159e3de439'
@@ -49,7 +50,7 @@ def main():
     run(['java', '-Xmx2g', '-cp', str(arguments.r8), 'com.android.tools.r8.D8', '--release',
          '--min-api', '28', '--lib', str(arguments.framework), '--output', str(output / 'overlay.jar'),
          *[str(classes / (name + '.class'))
-           for name in ('SdAudio', 'SdAudioRecord', 'SdAppPermissions', 'SdPackageManagerService')]], 'd8.log')
+           for name in ('SdAudio', 'SdAudioRecord', 'SdAppPermissions', 'SdPackageManagerService', 'SdCameraAppOps')]], 'd8.log')
     for jar, name in ((arguments.baseline_runtime, 'baseline.dex'), (output / 'overlay.jar', 'overlay.dex')):
         with zipfile.ZipFile(jar) as archive:
             (output / name).write_bytes(archive.read('classes.dex'))
@@ -82,7 +83,7 @@ def main():
     after = {path.relative_to(output / 'candidate-smali').as_posix(): path.read_bytes()
              for path in (output / 'candidate-smali').rglob('*.smali')}
     changed = sorted(name for name, data in before.items() if data != after[name])
-    assert changed == ['SdAppPermissions.smali', 'SdAudio.smali', 'SdPackageManagerService.smali'], changed
+    assert changed == ['SdAppPermissions.smali', 'SdAudio.smali', 'SdCameraAppOps.smali', 'SdPackageManagerService.smali'], changed
     assert after.keys() - before.keys() == {'SdAudioRecord.smali'}
     record = {'passed': True, 'baseline_runtime_sha256': digest(arguments.baseline_runtime),
               'runtime_sha256': digest(output / 'runtime.jar'), 'runtime_classes': len(after),
