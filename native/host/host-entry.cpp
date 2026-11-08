@@ -220,7 +220,8 @@ static void connect_manager(const fs::path &root) {
     if (!g_spawn_async(nullptr, av, nullptr,
                        (GSpawnFlags)(G_SPAWN_STDOUT_TO_DEV_NULL |
                                      G_SPAWN_STDERR_TO_DEV_NULL),
-                       nullptr, nullptr, nullptr, &e)) {
+                       [](gpointer) { if (setsid() < 0) _exit(127); },
+                       nullptr, nullptr, &e)) {
       close(guard);
       throw std::runtime_error(e ? e->message : "Cannot start manager");
     }
