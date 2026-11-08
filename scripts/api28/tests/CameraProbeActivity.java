@@ -104,7 +104,12 @@ public final class CameraProbeActivity extends Activity {
                     "EGL pbuffer failed");
             int cameras = Camera.getNumberOfCameras();
             require(cameras > 0, "Camera inventory missing");
+            boolean[] covered = new boolean[2];
             for (int id = 0; id < cameras; id++) {
+                Camera.CameraInfo info = new Camera.CameraInfo();
+                Camera.getCameraInfo(id, info);
+                require(info.facing >= 0 && info.facing < covered.length, "Unknown camera facing");
+                if (covered[info.facing]) continue;
                 int[] names = new int[1];
                 GLES20.glGenTextures(1, names, 0);
                 GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, names[0]);
@@ -121,6 +126,7 @@ public final class CameraProbeActivity extends Activity {
                     camera.setParameters(parameters);
                     texture.setDefaultBufferSize(size.width, size.height);
                     camera.setPreviewTexture(texture);
+                    camera.setDisplayOrientation(90);
                     camera.startPreview();
                     started = true;
                     long timestamp = 0;
@@ -133,7 +139,8 @@ public final class CameraProbeActivity extends Activity {
                         require(GLES20.glGetError() == GLES20.GL_NO_ERROR, "Camera texture GL error");
                     }
                     System.err.println("API28_CAMERA=preview|id=" + id + "|frames=12|size="
-                            + size.width + "x" + size.height + "|timestamp=" + timestamp);
+                            + size.width + "x" + size.height + "|orientation=90|timestamp=" + timestamp);
+                    covered[info.facing] = true;
                 } finally {
                     if (camera != null) {
                         try { if (started) camera.stopPreview(); }
@@ -143,6 +150,8 @@ public final class CameraProbeActivity extends Activity {
                     GLES20.glDeleteTextures(1, names, 0);
                 }
             }
+            require(covered[Camera.CameraInfo.CAMERA_FACING_BACK] && covered[Camera.CameraInfo.CAMERA_FACING_FRONT],
+                    "Front/back preview coverage missing");
         } finally {
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
             if (surface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, surface);
