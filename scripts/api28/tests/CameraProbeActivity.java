@@ -110,7 +110,8 @@ public final class CameraProbeActivity extends Activity {
                 Camera.CameraInfo info = new Camera.CameraInfo();
                 Camera.getCameraInfo(id, info);
                 require(info.facing >= 0 && info.facing < covered.length, "Unknown camera facing");
-                if (selected[info.facing] < 0) selected[info.facing] = id;
+                require(selected[info.facing] < 0, "Auxiliary camera exposed through Camera1");
+                selected[info.facing] = id;
             }
             require(selected[0] >= 0 && selected[1] >= 0, "Front/back inventory missing");
             int[] names = new int[1];

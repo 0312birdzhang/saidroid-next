@@ -129,22 +129,38 @@ struct Client{
  ~Client(){shutdown();}
 };
 static std::mutex registry_mutex,metadata_mutex;static std::atomic<long>next_id{1};static std::map<long,std::shared_ptr<Client>>registry;
-struct Info{int facing,orientation;};static std::vector<Info>camera_info;static bool metadata_known=false;
+struct Info{int facing,orientation,host_id;};static std::vector<Info>camera_info,legacy_camera_info;static bool metadata_known=false;
 static int count(JNIEnv*,jclass){
  std::lock_guard<std::mutex>guard(metadata_mutex);if(metadata_known)return camera_info.size();
  Client client;Reply reply;if(!client.spawn()||!client.call(COUNT,reply)||reply.h.a||reply.h.b<0||reply.h.b>8){fprintf(stderr,"SDCAMERA=enumerate|exposed=0|backend=droidmedia|reason=metadata-query-failed\n");return 0;}
- int size=reply.h.b;std::vector<Info>items;
- for(int i=0;i<size;i++){if(!client.call(INFO,reply,i)||reply.h.a)return 0;items.push_back(Info{reply.h.b==1?0:1,reply.h.c});}
- client.shutdown();camera_info=items;metadata_known=true;fprintf(stderr,"SDCAMERA=enumerate|exposed=%zu|backend=droidmedia|host_camera_count=%zu\n",items.size(),items.size());return items.size();
+ int size=reply.h.b;std::vector<Info>items,aliases;bool exposed[2]={false,false};
+ for(int i=0;i<size;i++){
+  if(!client.call(INFO,reply,i)||reply.h.a)return 0;
+  Info value{reply.h.b==1?0:1,reply.h.c,i};aliases.push_back(value);
+  // Camera1 uses the primary route for each facing. Hybris can also expose
+  // auxiliary IDs which connect successfully but cannot start a Camera1 preview.
+  if(!exposed[value.facing]){items.push_back(value);exposed[value.facing]=true;}
+ }
+ // Older applications can have cached the auxiliary IDs. Keep those IDs
+ // usable as aliases to the corresponding primary route without advertising
+ // extra cameras to new callers.
+ for(auto&alias:aliases){auto primary=std::find_if(items.begin(),items.end(),[&](const Info&value){return value.facing==alias.facing;});alias=*primary;}
+ client.shutdown();camera_info=items;legacy_camera_info=aliases;metadata_known=true;fprintf(stderr,"SDCAMERA=enumerate|exposed=%zu|backend=droidmedia|host_camera_count=%d\n",items.size(),size);return items.size();
 }
-static void info(JNIEnv*e,jclass,jint id,jobject object){if(id<0||id>=count(e,nullptr)||!object){fail(e,"java/lang/RuntimeException","Invalid camera ID or CameraInfo");return;}jclass type=e->GetObjectClass(object);e->SetIntField(object,e->GetFieldID(type,"facing","I"),camera_info[id].facing);e->SetIntField(object,e->GetFieldID(type,"orientation","I"),camera_info[id].orientation);e->DeleteLocalRef(type);}
+static const Info*camera_metadata(JNIEnv*e,int id){
+ count(e,nullptr);if(id<0)return nullptr;
+ if(size_t(id)<camera_info.size())return &camera_info[id];
+ if(size_t(id)<legacy_camera_info.size())return &legacy_camera_info[id];
+ return nullptr;
+}
+static void info(JNIEnv*e,jclass,jint id,jobject object){const Info*value=camera_metadata(e,id);if(!value||!object){fail(e,"java/lang/RuntimeException","Invalid camera ID or CameraInfo");return;}jclass type=e->GetObjectClass(object);e->SetIntField(object,e->GetFieldID(type,"facing","I"),value->facing);e->SetIntField(object,e->GetFieldID(type,"orientation","I"),value->orientation);e->DeleteLocalRef(type);}
 static std::shared_ptr<Client>get(JNIEnv*e,jobject self){long id=e->GetLongField(self,context_field);std::lock_guard<std::mutex>guard(registry_mutex);auto it=registry.find(id);if(it!=registry.end())return it->second;fail(e,"java/lang/RuntimeException","Camera is released");return{};}
 static bool call(JNIEnv*e,std::shared_ptr<Client>client,uint32_t type,int a=0,int b=0,const char*data=nullptr,Reply*out=nullptr){if(!client)return false;Reply reply;if(!client->call(type,reply,a,b,data)||reply.h.a){fprintf(stderr,"SDCAMERA=command_failed|id=%ld|op=%u|status=%d\n",client->id,type,reply.h.a);fail(e,"java/lang/RuntimeException","Physical camera command failed");return false;}if(out)*out=std::move(reply);return true;}
 static jint setup(JNIEnv*e,jobject self,jobject weak,jint id,jint,jstring){
- e->CallStaticVoidMethod(access_class,access_check);if(e->ExceptionCheck())return -13;if(id<0||id>=count(e,nullptr))return -19;
- auto client=std::make_shared<Client>();client->id=next_id++;if(!client->spawn())return -19;Reply reply;if(!client->call(OPEN,reply,id)||reply.h.a)return -13;
- client->mirror=camera_info[id].facing==1;client->weak=e->NewGlobalRef(weak);{std::lock_guard<std::mutex>g(registry_mutex);registry[client->id]=client;}e->SetLongField(self,context_field,client->id);
- fprintf(stderr,"SDCAMERA=opened|id=%ld|camera=%d|facing=%d|helper_pid=%d|backend=droidmedia\n",client->id,id,camera_info[id].facing,client->child);return 0;
+ e->CallStaticVoidMethod(access_class,access_check);if(e->ExceptionCheck())return -13;const Info*value=camera_metadata(e,id);if(!value)return -19;
+ auto client=std::make_shared<Client>();client->id=next_id++;if(!client->spawn())return -19;Reply reply;if(!client->call(OPEN,reply,value->host_id)||reply.h.a)return -13;
+ client->mirror=value->facing==1;client->weak=e->NewGlobalRef(weak);{std::lock_guard<std::mutex>g(registry_mutex);registry[client->id]=client;}e->SetLongField(self,context_field,client->id);
+ fprintf(stderr,"SDCAMERA=opened|id=%ld|camera=%d|host_camera=%d|facing=%d|helper_pid=%d|backend=droidmedia\n",client->id,id,value->host_id,value->facing,client->child);return 0;
 }
 static void release(JNIEnv*e,jobject self){long id=e->GetLongField(self,context_field);e->SetLongField(self,context_field,0);std::shared_ptr<Client>client;{std::lock_guard<std::mutex>g(registry_mutex);auto it=registry.find(id);if(it!=registry.end()){client=it->second;registry.erase(it);}}if(client){client->shutdown();fprintf(stderr,"SDCAMERA=released|id=%ld|frames=%llu|callbacks=%llu|helper_remaining=0\n",id,(unsigned long long)client->frames.load(),(unsigned long long)client->callbacks.load());}}
 static void attach_surface(JNIEnv*e,jobject self,jobject value,jobject texture=nullptr){
