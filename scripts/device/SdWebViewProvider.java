@@ -485,7 +485,8 @@ public final class SdWebViewProvider {
         }
         void resizeEngine() {
             if(engine == null || frameW < 1 || frameH < 1)return;
-            try{command(new JSONObject().put("op","resize").put("width",Math.min(frameW,SdWebEngine.MAX_HOST_WIDTH)).put("height",Math.min(frameH,SdWebEngine.MAX_HOST_HEIGHT)));}
+            int[] size=SdWebEngine.hostSize(frameW,frameH);
+            try{command(new JSONObject().put("op","resize").put("width",size[0]).put("height",size[1]));}
             catch(Exception failure){engineFailed("resize:"+failure.getClass().getSimpleName());}
         }
 
@@ -989,7 +990,10 @@ public final class SdWebViewProvider {
                             if (n.equals("onCheckIsTextEditor")) return Boolean.valueOf(editorActive);
                             if (n.equals("onTouchEvent") && engine!=null) {
                                 MotionEvent event=(MotionEvent)args[0];
-                                try {command(new JSONObject().put("op","touch").put("action",event.getActionMasked()).put("x",event.getX()).put("y",event.getY()).put("time",event.getEventTime()));return Boolean.TRUE;}
+                                if(view.getWidth()<1||view.getHeight()<1)return Boolean.FALSE;
+                                // The host consumes resize and touch packets in order. Send View
+                                // extents so it maps input to its current viewport, not a stale frame.
+                                try {command(SdWebEngine.touchCommand(event.getActionMasked(),event.getX(),event.getY(),event.getEventTime(),view.getWidth(),view.getHeight()));return Boolean.TRUE;}
                                 catch(Exception failure){engineFailed("touch");return Boolean.FALSE;}
                             }
                             if (n.equals("dispatchKeyEvent") || n.equals("onTouchEvent")

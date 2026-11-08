@@ -47,16 +47,16 @@ reboot
 
 ## 4. 非 1080x2160 屏幕与 Android 9 底包
 
-运行时默认按已验证的 1080x2160（Pixel 3a XL / bonito）报告显示信息。其他面板在启动应用前设置以下环境变量（可写入用户会话的 `~/.config/environment.d/saildroid.conf`）：
+启动器会优先读取宿主 Wayland 输出尺寸；无法读取时回退到已验证的 1080x2160（Pixel 3a XL / bonito）。其他面板也可以在启动应用前显式设置以下环境变量（可写入用户会话的 `~/.config/environment.d/saildroid.conf`）：
 
 ```sh
 SAILDROID_DISPLAY_WIDTH=1080
 SAILDROID_DISPLAY_HEIGHT=2340
 ```
 
-Android 9（API 28）底包上 `libsdhost29.so` 会把 ART 自带的 `libjavacore.so`/`libopenjdk*.so` 交给 glibc 加载，以匹配随包发布的 Java 核心。WebView 的 Qt/WPE 宿主不接受初始高度大于 2160，运行时已将宿主尺寸限制为 2160。
+Android 9（API 28）底包上 `libsdhost29.so` 会把 ART 自带的 `libjavacore.so`/`libopenjdk*.so` 交给 glibc 加载，以匹配随包发布的 Java 核心。WebView 的 Qt/WPE 宿主限制为宽 2160、高 4096、RGBA 帧 9 MiB。初始加载和窗口调整使用同一尺寸预算，超限时按比例缩小；触摸坐标按实际视图与宿主视口尺寸换算，已在预算内的视口保持原尺寸。
 
-机型/厂商等公开身份不是运行时写死的：`scripts/api29/capture-hardware-identity-phone.py` 在目标机上抓取公开字段，打包时经 `package-component.py --hardware-profile` 写入组件 `build.prop`。Sailfish 硬件 ID 与 Android 底包 `ro.product.device` 不一致的端口在 `scripts/api29/hardware-identity-aliases.json` 登记别名（如 `fajita → OnePlus6T`）；无法确认一致身份时保留编译期默认值。
+机型/厂商等公开身份不是运行时写死的：`scripts/api29/capture-hardware-identity-phone.py` 在目标机上抓取公开字段，打包时经 `package-component.py --hardware-profile` 写入组件 `build.prop`，同时保存身份配置、解析结果和别名表用于追溯。Sailfish 硬件 ID 与 Android 底包 `ro.product.device` 不一致的端口在 `scripts/api29/hardware-identity-aliases.json` 登记别名（如 `fajita → OnePlus6T`）。指定配置但无法确认一致身份时打包报错；未指定配置时保留编译期默认值。
 
 ## 开发认证
 

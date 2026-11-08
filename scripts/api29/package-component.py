@@ -112,7 +112,7 @@ if a.hardware_profile:
  properties,identity=apply_identity(properties,json.loads(a.hardware_profile.read_text()))
  copy(a.hardware_profile,'share/build/hardware-identity/profile.json')
  target=root/'share/build/hardware-identity/resolution.json';target.write_text(json.dumps(identity,indent=2)+'\n')
- for source in ['hardware_identity.py','capture-hardware-identity-phone.py']:
+ for source in ['hardware_identity.py','capture-hardware-identity-phone.py','hardware-identity-aliases.json']:
   copy(repo/'scripts/api29'/source,'share/build/hardware-identity/'+source)
 (root/'build.prop').write_text(properties)
 (root/'runtime.json').write_text(json.dumps(dict(schema='saildroid-api29-component-v1',api=29,version='0.3.0',boot_jars=boot,renderer='hwui-gles-wayland' if hardware else 'software-wayland',native_namespaces='application-process',native_host=True,native_nice_limit=json.loads((a.product/'manifest.json').read_text()).get('native_nice_limit',28),binder_device=a.binder_device,boot_image=boot_image),indent=2)+'\n')
