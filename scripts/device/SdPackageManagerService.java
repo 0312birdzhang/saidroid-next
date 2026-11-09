@@ -39,6 +39,9 @@ public final class SdPackageManagerService implements InvocationHandler {
     }
     @Override public Object invoke(Object proxy,Method method,Object[] a)throws Throwable{
         String n=method.getName();if(n.equals("asBinder"))return binder;if(n.equals("toString"))return "SailDroid APK package service";if(n.equals("hashCode"))return System.identityHashCode(proxy);if(n.equals("equals"))return proxy==a[0];
+        // This runtime starts installed APKs in normal mode and has no
+        // Android system-server safe-mode boot transition.
+        if(n.equals("isSafeMode"))return false;
         if(n.equals("getApplicationInfo"))return app((String)a[0]);if(n.equals("getPackageInfo"))return info((String)a[0],(Integer)a[1]);
         if(n.equals("notifyPackageUse")){
             if(!SdApkPackage.NAME.equals(a[0])&&SdInstrumentation.applicationInfo((String)a[0])==null)throw new SecurityException("Usage package mismatch");
