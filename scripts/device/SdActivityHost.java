@@ -6,6 +6,7 @@ import android.content.res.*;
 import android.os.*;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Real API 29 ActivityThread lifecycle, hosted asynchronously behind Wayland. */
 public final class SdActivityHost {
@@ -15,6 +16,7 @@ public final class SdActivityHost {
     private static boolean hostVisible=true;
     private static int ident;
     private static boolean closeWhenReady;
+    private static final AtomicInteger pendingStarts=new AtomicInteger();
     private static android.net.Uri pendingInstallerUri;
     private static final ArrayList<Remote> remoteActivities=new ArrayList<Remote>();
     private static final class Remote {
@@ -216,9 +218,18 @@ public final class SdActivityHost {
             requestPermissions(intent,resultTo,resultWho,requestCode);return;
         }
         if(SdApkPackage.resolveActivities(intent,intent.getType(),0).isEmpty())throw new ActivityNotFoundException(intent.toString());
-        if(resultTo!=null||requestCode>=0)find(resultTo);
+        final Entry caller=resultTo!=null||requestCode>=0?find(resultTo):null;
+        final String referrer=caller==null?SdApkPackage.NAME:caller.info.packageName;
         final Intent snapshot=new Intent(intent);
-        post(new Runnable(){public void run(){try{launch(snapshot,resultTo,resultWho,requestCode);}catch(Exception e){throw new IllegalStateException("Activity launch failed",e);}}});
+        pendingStarts.incrementAndGet();
+        post(new Runnable(){public void run(){try{
+            // The caller can finish between accepting this request and dispatch.
+            // Retain its referrer, but detach results from a destroyed Activity.
+            boolean callerAlive=caller!=null&&stack.contains(caller);
+            if(caller!=null&&!callerAlive)System.err.println("SDACTIVITY=launch_caller_finished|class="+caller.info.name+"|request_code="+requestCode);
+            launch(snapshot,callerAlive?caller.token:null,resultWho,callerAlive?requestCode:-1,null,referrer);
+        }catch(Exception e){throw new IllegalStateException("Activity launch failed",e);}
+        finally{pendingStarts.decrementAndGet();}}});
     }
     private static void requestPermissions(Intent intent,final IBinder token,final String who,final int requestCode){
         final boolean settings=SdPermissionController.acceptsSettings(intent);
@@ -327,6 +338,7 @@ public final class SdActivityHost {
             if(revealed!=null&&hostVisible&&revealed.activity!=null)resume(revealed);
             stop(e);ActivityThread.currentActivityThread().handleDestroyActivity(token,true,0,false,"SailDroid Activity finish");
             stack.remove(e);refreshTask();
+            if(stack.isEmpty()&&pendingStarts.get()>0){System.err.println("SDACTIVITY=activity_stack_empty|pending_starts="+pendingStarts.get());return;}
             if(stack.isEmpty()&&SdInstrumentation.requested()){System.err.println("SDINSTRUMENTATION=activity_stack_empty|process_retained=true");return;}
             if(stack.isEmpty()){try{SdServiceHost.closeAll();}catch(Exception failure){throw new IllegalStateException("Service cleanup failed",failure);}SdWindowHost.stop();System.exit(0);}
         }});return true;
