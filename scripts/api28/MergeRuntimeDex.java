@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.TreeMap;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
@@ -17,6 +19,29 @@ import org.jf.dexlib2.immutable.ImmutableMethod;
 import org.jf.dexlib2.writer.pool.DexPool;
 
 public final class MergeRuntimeDex {
+    private static String signature(Method method) {
+        return method.getName() + method.getParameterTypes().toString() + method.getReturnType();
+    }
+
+    private static ClassDef preserveSyntheticMethods(ClassDef previous, ClassDef replacement) {
+        List<Method> methods = new ArrayList<>();
+        Set<String> signatures = new HashSet<>();
+        for (Method method : replacement.getMethods()) {
+            methods.add(method);
+            signatures.add(signature(method));
+        }
+        // Retained nested classes can still call javac's previous accessors or
+        // constructor bridges after a partial runtime recompilation.
+        for (Method method : previous.getMethods()) {
+            if ((method.getAccessFlags() & 0x1000) != 0 && !signatures.contains(signature(method))) {
+                methods.add(method);
+            }
+        }
+        return new ImmutableClassDef(replacement.getType(), replacement.getAccessFlags(),
+            replacement.getSuperclass(), replacement.getInterfaces(), replacement.getSourceFile(),
+            replacement.getAnnotations(), replacement.getFields(), methods);
+    }
+
     private static DexBackedDexFile read(String path) throws Exception {
         try (BufferedInputStream input = new BufferedInputStream(new FileInputStream(path))) {
             return DexBackedDexFile.fromInputStream(Opcodes.forApi(28), input);
@@ -48,6 +73,10 @@ public final class MergeRuntimeDex {
         int preserved = classes.size();
         int replaced = 0;
         for (ClassDef definition : read(arguments[1]).getClasses()) {
+            ClassDef previous = classes.get(definition.getType());
+            if (previous != null && arguments.length == 4 && arguments[3].equals("--preserve-synthetic")) {
+                definition = preserveSyntheticMethods(previous, definition);
+            }
             if (classes.put(definition.getType(), definition) != null) {
                 preserved--;
                 replaced++;

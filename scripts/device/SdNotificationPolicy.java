@@ -34,6 +34,11 @@ public final class SdNotificationPolicy implements InvocationHandler {
     }
     @Override public synchronized Object invoke(Object proxy,Method method,Object[] args)throws Throwable{
         String name=method.getName();if(name.equals("asBinder"))return binder;if(name.equals("toString"))return "SailDroid notification delivery disabled";if(name.equals("hashCode"))return System.identityHashCode(proxy);if(name.equals("equals"))return proxy==args[0];
+        if(name.equals("enqueueToast")){own(args[0]);SdToastQueue.enqueue((ITransientNotification)args[1],(Integer)args[2]);return null;}
+        if(name.equals("cancelToast")){own(args[0]);SdToastQueue.cancel((ITransientNotification)args[1]);return null;}
+        // Toast.TN removes its own view through the local WindowSession before
+        // finishToken. This backend has no separate WindowManager token table.
+        if(name.equals("finishToken")){own(args[0]);return null;}
         if(name.equals("areNotificationsEnabled")||name.equals("getPackageImportance")){own(args[0]);return name.equals("areNotificationsEnabled")?Boolean.FALSE:Integer.valueOf(NotificationManager.IMPORTANCE_NONE);}
         if(name.equals("areNotificationsEnabledForPackage")){own(args[0]);uid(args[1]);return false;}
         if(name.equals("getPrivateNotificationsAllowed"))return false; // No Android notification content can be displayed by this backend.

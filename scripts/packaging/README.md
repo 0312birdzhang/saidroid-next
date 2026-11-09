@@ -44,6 +44,31 @@ capability. There are no scriptlets. The only permitted APKs are the component's
 `share/manager.apk` and `system/framework/framework-res.apk`; user/test APKs,
 application data, desktop registration, and service units are rejected.
 
+## 2026-11-09 API28 Java compatibility updates
+
+Partial runtime updates compile the changed Java sources with `javac --release 8`
+against the pinned API28 framework, then run D8 with `--min-api 28`.
+`scripts/api28/MergeRuntimeDex.java` accepts
+`BASELINE.dex OVERLAY.dex OUTPUT.dex --preserve-synthetic` to retain earlier
+synthetic accessors and constructor bridges referenced by retained classes.
+The merged JAR passes through `scripts/api28/encode-platform-dex.py`, followed
+by a comparison of every existing member and its hidden-API flags.
+
+Rebuild the matching boot images whenever the runtime JAR changes. Record the
+compiler identity, all boot JAR hashes, final logical locations, and emitted
+ART/OAT/VDEX hashes. Reseal the activation manifest after staging the new JAR,
+images, source records, and runtime metadata. Verify the complete extracted RPM
+inventory, scriptlets, capabilities, dependencies, and installed release.
+
+The network and toast repair records live in
+`share/build/network-miniapp-20261109` within the r322y RPM. The source includes
+`scripts/device/tests/check-connectivity-callbacks.py` and
+`scripts/device/tests/check-toast-queue.py` for callback and toast lifecycle
+regressions. Host network observations project the existing snapshot helper's
+DNS and routes and derive validation from the matching ConnMan service's
+`online` state. The default Android network continues to use the host resolver
+through network ID zero.
+
 ## 2026-11-04 development example
 
 Evidence root:

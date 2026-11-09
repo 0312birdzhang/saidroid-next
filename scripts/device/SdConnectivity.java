@@ -22,7 +22,24 @@ public final class SdConnectivity implements InvocationHandler {
     private int nextRequest = 1;
 
     private static final class LinuxLinks implements HostProvider {
-        public List<Link> read() throws IOException { return links(); }
+        private final SdHostNetworkObservation host = new SdHostNetworkObservation();
+        public List<Link> read() throws IOException {
+            SdConnectivitySnapshot snapshot = host.read();
+            List<Link> links = new ArrayList<Link>();
+            for (SdConnectivitySnapshot.Link observed : snapshot.links.values()) {
+                Link link = new Link();
+                link.iface = java.net.NetworkInterface.getByName(observed.name);
+                if (link.iface == null || link.iface.getIndex() != observed.index)
+                    throw new IOException("Host interface changed during observation");
+                link.type = observed.type;
+                link.defaultRoute = snapshot.active != null && snapshot.active == observed.id;
+                link.networkId = link.defaultRoute ? 0 : observed.id;
+                link.observedProperties = observed.properties;
+                link.observedCapabilities = observed.capabilities;
+                links.add(link);
+            }
+            return links;
+        }
     }
 
     private static final class NetworkThreads implements ThreadFactory {
@@ -356,7 +373,8 @@ public final class SdConnectivity implements InvocationHandler {
         if (name.equals("getActiveNetwork")) return selected == null ? null : selected.network();
         if (name.equals("getActiveNetworkInfo")) return selected == null ? null : selected.info();
         if (name.equals("getActiveLinkProperties")) return selected == null ? null : selected.properties();
-        if (name.equals("isActiveNetworkMetered")) return selected == null || selected.type == ConnectivityManager.TYPE_MOBILE;
+        if (name.equals("isActiveNetworkMetered")) return selected == null
+                || !selected.capabilities().hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
         if (name.equals("getAllNetworks")) {
             Network[] result = new Network[links.size()];
             for (int i = 0; i < links.size(); i++) result[i] = links.get(i).network();
