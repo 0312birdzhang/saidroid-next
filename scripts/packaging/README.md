@@ -124,6 +124,29 @@ zero-offset Bitmap buffers. A heap ByteBuffer positioned at 4 currently
 triggers an ART array-pointer abort in `Bitmap.copyPixelsToBuffer` on this
 API28 runtime.
 
+### r323f Activity queue and page recovery
+
+The r323f runtime uses version `0.321.57-64`. Its repair inputs and device boot
+image recipe are recorded under
+`share/build/webview-runtime-20261109/recovery`. The build starts from the sealed
+r323e payload, overlays `SdActivityHost` and `SdWebViewProvider`, compiles the
+42 matching boot image files on the aarch64 device, and uses the established
+Sailfish SDK target `SailfishOS-latest-aarch64` for the RPM. The provenance
+includes `prepare_package_recovery.py` and the exact input hashes.
+
+Activity start requests retain the caller's package when they enter the queue.
+If the caller finishes before dispatch, the accepted launch continues with its
+saved referrer and detached result ownership. Pending starts also retain a
+process whose last Activity has just finished. Unknown caller tokens are
+validated when a new request is accepted.
+
+A WPE page load error reports the failing URL through `WebViewClient` and keeps
+the engine available for JavaScript and subsequent navigation. Engine process
+failures continue through the existing renderer cleanup path.
+`native/webview/qt-helper/RecoveryProbeActivity.java` exercises these paths
+through a normal API28 APK, including local file errors, HTTPS, Java interfaces,
+proxy Activity finish/start ordering, result delivery, and one-Activity tasks.
+
 ## 2026-11-04 development example
 
 Evidence root:
