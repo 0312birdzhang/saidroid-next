@@ -80,7 +80,7 @@ timeout, and cancellation.
 
 ## 2026-11-09 WPE runtime dependencies
 
-The r323d runtime records its engine inputs in
+The r323e runtime records its engine inputs in
 `share/build/webview-runtime-20261109/runtime-manifest.json`. Install the
 runtime and these aarch64 engine packages in one RPM transaction.
 
@@ -102,7 +102,11 @@ required compatibility library closure under its own `lib/webview` directory,
 with source records and license notices. `sdwebview-host` expands
 `${SD_COMPONENT}` to its canonical release root when configuring the isolated
 process. The libsoup boundary resolves its SONAME through that configured
-library path. The runtime RPM pins all five engine dependencies.
+library path. The runtime RPM pins all five engine dependencies. The
+release-owned `libegl-stubs.so` supplies EGL 1.5 entry points through the
+platform KHR functions. Configure both `LD_PRELOAD` and
+`ATLANTIC_LD_PRELOAD`, and propagate the release library path through
+`ATLANTIC_LD_LIBRARY_PATH` for the WebKit helper wrappers.
 
 After installation, verify both the engine RPM inventories and SailDroid's
 activation seal. Run an ordinary APK through the public Android WebView API
@@ -115,7 +119,10 @@ API28 JNI registration table initializes Android NIO helpers before graphics,
 which provides the buffer access methods used by Bitmap pixel transfers.
 Exercise heap, direct, and typed buffer copies in the ordinary APK probe. The
 API28 CLI bootstrap validates 97 framework registrations and carries its
-matching source hash in the CLI module manifest.
+matching source hash in the CLI module manifest. The probe covers
+zero-offset Bitmap buffers. A heap ByteBuffer positioned at 4 currently
+triggers an ART array-pointer abort in `Bitmap.copyPixelsToBuffer` on this
+API28 runtime.
 
 ## 2026-11-04 development example
 
