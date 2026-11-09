@@ -151,21 +151,30 @@ def mount_type(path):
 
 
 def prepare_static_binder(account):
-    source = Path('/dev/anbox-binder')
+    sources = (Path('/dev/anbox-binder'), Path('/dev/puddlejumper'))
+    metadata = None
+    if METADATA.exists() or METADATA.is_symlink():
+        metadata_info = METADATA.lstat()
+        if not stat.S_ISREG(metadata_info.st_mode) or metadata_info.st_uid != 0 or stat.S_IMODE(metadata_info.st_mode) != 0o644:
+            raise RuntimeError('Untrusted static Binder metadata')
+        metadata = json.loads(METADATA.read_text())
+        source = Path(metadata.get('source', ''))
+        if source not in sources:
+            raise RuntimeError('Existing Binder provisioning has an unsupported static source')
+    else:
+        source = next((path for path in sources if path.exists()), None)
+        if source is None:
+            raise RuntimeError('A dedicated anbox-binder or puddlejumper device is required without binderfs')
     root_directory(source.parent, 0o755)
     info = source.lstat()
     if not stat.S_ISCHR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
-        raise RuntimeError('The dedicated Anbox Binder device is not trusted')
-    identity = Path('/sys/class/misc/anbox-binder/dev').read_text().strip()
+        raise RuntimeError('The dedicated static Binder device is not trusted: ' + str(source))
+    identity = Path('/sys/class/misc/' + source.name + '/dev').read_text().strip()
     expected = str(os.major(info.st_rdev)) + ':' + str(os.minor(info.st_rdev))
     if identity != expected:
         raise RuntimeError('Static Binder device differs from its kernel registration')
     managed = False
-    if METADATA.exists():
-        metadata_info = METADATA.lstat()
-        if METADATA.is_symlink() or metadata_info.st_uid != 0 or stat.S_IMODE(metadata_info.st_mode) != 0o644:
-            raise RuntimeError('Untrusted static Binder metadata')
-        metadata = json.loads(METADATA.read_text())
+    if metadata is not None:
         managed = (metadata.get('schema') == 'saildroid-static-binder-provision-v1'
                    and metadata.get('source') == str(source)
                    and metadata.get('major') == os.major(info.st_rdev)

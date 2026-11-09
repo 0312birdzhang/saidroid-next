@@ -218,10 +218,10 @@ class BinderSetupTests(unittest.TestCase):
         self.assertEqual(self.module.METADATA.read_bytes(), metadata)
         self.assertFalse(self.mounts)
 
-    def static_fixture(self):
+    def static_fixture(self, name='anbox-binder'):
         self.module.RUNTIME.mkdir(mode=0o700)
         self.module.DIRECTORY.mkdir(parents=True)
-        source = self.root / 'dev/anbox-binder'
+        source = self.root / 'dev' / name
         source.parent.mkdir()
         self.device(source)
         registration = self.root / 'registration'
@@ -230,8 +230,8 @@ class BinderSetupTests(unittest.TestCase):
         processes.mkdir()
         boot_id = self.root / 'boot_id'
         boot_id.write_text('fixture-boot\n')
-        paths = {'/dev/anbox-binder': source,
-                 '/sys/class/misc/anbox-binder/dev': registration,
+        paths = {'/dev/' + name: source,
+                 '/sys/class/misc/' + name + '/dev': registration,
                  '/proc': processes, '/proc/sys/kernel/random/boot_id': boot_id}
         replacement = patch.object(self.module, 'Path', lambda name: paths.get(str(name), Path(name)))
         replacement.start()
@@ -259,6 +259,28 @@ class BinderSetupTests(unittest.TestCase):
         self.assertEqual(list(self.module.DIRECTORY.iterdir()), [])
         self.module.prepare_static_binder(self.account)
         self.assertTrue(self.module.TARGET.exists())
+
+    def test_puddlejumper_device_and_repeated_execution(self):
+        source, _ = self.static_fixture('puddlejumper')
+        before = source.stat()
+        self.module.prepare_static_binder(self.account)
+        metadata = json.loads(self.module.METADATA.read_text())
+        self.assertEqual(metadata['source'], str(source))
+        target = self.module.TARGET.stat()
+        self.module.prepare_static_binder(self.account)
+        self.assertEqual(target.st_ino, self.module.TARGET.stat().st_ino)
+        self.assertEqual(source.stat().st_mode, before.st_mode)
+        self.assertEqual(source.stat().st_uid, 0)
+
+    def test_puddlejumper_external_consumer_rejected(self):
+        source, processes = self.static_fixture('puddlejumper')
+        process = processes / '123'
+        (process / 'fd').mkdir(parents=True)
+        (process / 'fd/3').symlink_to(source)
+        (process / 'exe').symlink_to('/usr/bin/other-consumer')
+        with self.assertRaisesRegex(RuntimeError, 'already in use'):
+            self.module.prepare_static_binder(self.account)
+        self.assertFalse(self.module.TARGET.exists())
 
     def test_static_external_consumer_rejected(self):
         source, processes = self.static_fixture()

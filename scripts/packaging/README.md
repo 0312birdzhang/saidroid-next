@@ -169,6 +169,15 @@ root-owned copy at `/usr/local/sbin/saildroid-binder-setup`. Repeated execution
 preserves the device identity. Boot recreates the mount and refreshes device
 metadata. This common prerequisite remains available across runtime rollback.
 
+When binderfs is unavailable, the helper accepts a dedicated static
+`/dev/anbox-binder` or `/dev/puddlejumper` node. It preserves a previously
+registered source and otherwise selects anbox-binder first. Static provisioning
+checks the kernel misc-device identity, protocol version, root ownership,
+0600 permissions and existing consumers before creating the user-owned runtime
+node. Kernels with `binder,vndbinder,hwbinder,puddlejumper,vndpuddlejumper,hwpuddlejumper`
+can use puddlejumper for the private runtime Binder context. Binderfs remains
+the preferred backend when available.
+
 Close all SailDroid hosts, including its native session manager, before activation.
 The helper never kills them. It holds both a root setup lock and the existing
 native manager startup lock, scans owned processes, and atomically replaces
