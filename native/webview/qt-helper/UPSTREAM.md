@@ -15,7 +15,7 @@ libwpe 1.17.0 development headers under `include/wpe-input.h`; its full notice
 is retained and packaged. No Qt plugin or WebKit implementation source is copied. The installed plugin/engine are external
 dependencies, currently tested with `atlantic-browser-1.6.0-748.1.aio.aarch64`.
 
-The r323b deployment uses the modular aarch64 engine packages from build 768.1,
+The r323c deployment uses the modular aarch64 engine packages from build 768.1,
 with WPE WebKit 2.54.2 and the same inspected Atlantic source revision above.
 The runtime RPM pins those package identities and carries the required
 compatibility library closure, source records, and notices. The engine helper

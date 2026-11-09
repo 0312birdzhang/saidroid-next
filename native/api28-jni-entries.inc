@@ -19,6 +19,7 @@
     "_ZN7android29register_android_app_ActivityEP7_JNIEnv",
     "_ZN7android35register_android_app_ActivityThreadEP7_JNIEnv",
     "_ZN7android25register_android_os_DebugEP7_JNIEnv",
+    "_ZN7android26register_android_nio_utilsEP7_JNIEnv",
     "_ZN7android32register_android_graphics_CanvasEP7_JNIEnv",
     "_ZN7android31register_android_opengl_classesEP7_JNIEnv",
     "_Z33register_android_opengl_jni_EGL14P7_JNIEnv",
