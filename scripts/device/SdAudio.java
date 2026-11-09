@@ -120,6 +120,12 @@ public final class SdAudio implements InvocationHandler {
             System.err.println("SDAUDIO=mode|source=android-applied-mode|mode="+APPLIED_ANDROID_MODE+"|supported_transitions=none|host_call_mode=unintegrated");
             return APPLIED_ANDROID_MODE;
         }
+        if(name.equals("isSpeakerphoneOn")&&method.getDeclaringClass()==IAudioService.class
+                &&method.getReturnType()==Boolean.TYPE&&method.getParameterTypes().length==0){
+            // Android queries the applied communication force-use override.
+            System.err.println("SDAUDIO=speakerphone|on=false|source=android-applied-communication-policy|supported_transitions=none");
+            return false;
+        }
         if(name.equals("getStreamVolume")||name.equals("getLastAudibleStreamVolume")){int value=volume();System.err.println("SDAUDIO=volume|index="+value+"|source=pulseaudio|range=0-100");return value;}
         if(name.equals("getStreamMaxVolume"))return 100;
         if(name.equals("getStreamMinVolume"))return 0;
