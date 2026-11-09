@@ -147,6 +147,12 @@ failures continue through the existing renderer cleanup path.
 through a normal API28 APK, including local file errors, HTTPS, Java interfaces,
 proxy Activity finish/start ordering, result delivery, and one-Activity tasks.
 
+The final r323g package uses version `0.321.58-65` and the same runtime JAR and
+boot images. It includes the corrected recovery probe, which loads a valid
+document after a page error before checking JavaScript and Java interfaces.
+Its packaging recipe is `prepare_package_recovery_final.py` in the recovery
+provenance directory.
+
 ## 2026-11-04 development example
 
 Evidence root:

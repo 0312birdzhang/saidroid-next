@@ -39,15 +39,9 @@ public final class RecoveryProbeActivity extends Activity {
                 page = 1;
                 handler.postDelayed(new Runnable() {
                     public void run() {
-                        web.evaluateJavascript("1 + 1", new ValueCallback<String>() {
-                            public void onReceiveValue(String value) {
-                                if (!"2".equals(value)) throw new AssertionError("Engine lost after page error " + value);
-                                System.err.println("API28_COMPAT=webview_error_recovered|javascript=true");
-                                web.loadDataWithBaseURL("https://saildroid.invalid/",
-                                    "<!doctype html><title>Recovery probe</title><body>Recovery probe</body>",
-                                    "text/html", "UTF-8", null);
-                            }
-                        });
+                        web.loadDataWithBaseURL("https://saildroid.invalid/",
+                            "<!doctype html><title>Recovery probe</title><body>Recovery probe</body>",
+                            "text/html", "UTF-8", null);
                     }
                 }, 300);
             }
