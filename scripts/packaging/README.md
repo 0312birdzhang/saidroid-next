@@ -80,7 +80,7 @@ timeout, and cancellation.
 
 ## 2026-11-09 WPE runtime dependencies
 
-The r323c runtime records its engine inputs in
+The r323d runtime records its engine inputs in
 `share/build/webview-runtime-20261109/runtime-manifest.json`. Install the
 runtime and these aarch64 engine packages in one RPM transaction.
 
@@ -113,7 +113,9 @@ parents can measure a WebView attached with `Activity.setContentView`. Package
 that provider change with boot images compiled from the same runtime JAR. The
 API28 JNI registration table initializes Android NIO helpers before graphics,
 which provides the buffer access methods used by Bitmap pixel transfers.
-Exercise heap, direct, and typed buffer copies in the ordinary APK probe.
+Exercise heap, direct, and typed buffer copies in the ordinary APK probe. The
+API28 CLI bootstrap validates 97 framework registrations and carries its
+matching source hash in the CLI module manifest.
 
 ## 2026-11-04 development example
 
