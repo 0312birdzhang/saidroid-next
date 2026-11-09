@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 /** One isolated Qt/WPE host per WebView. The UI thread never waits for IPC. */
 public final class SdWebEngine {
+    private static final int MAX_FRAME_BYTES = 2160 * 4096 * 4;
     public interface Listener {
         void event(JSONObject event);
         void frame(Bitmap bitmap, long sequence);
@@ -72,7 +73,7 @@ public final class SdWebEngine {
                     if("frame".equals(event.optString("event"))){
                         final int w=event.getInt("width"),h=event.getInt("height"),count=event.getInt("bytes");
                         final long seq=event.getLong("seq");
-                        if(w<1||h<1||w>2160||h>4096||(long)w*h*4!=count||count>9*1024*1024||!"rgba8888".equals(event.getString("format")))throw new IOException("invalid frame geometry");
+                        if(w<1||h<1||w>2160||h>4096||(long)w*h*4!=count||count>MAX_FRAME_BYTES||!"rgba8888".equals(event.getString("format")))throw new IOException("invalid frame geometry");
                         if(pixels==null||pixels.length!=count)pixels=new byte[count];
                         input.readFully(pixels);final byte[] framePixels=pixels;
                         ui.post(new Runnable(){public void run(){
