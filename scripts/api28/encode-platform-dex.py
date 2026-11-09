@@ -1,16 +1,51 @@
 #!/usr/bin/env python3
 """Preserve baseline member restrictions by signature in a rebuilt platform JAR.
 
-Members absent from the baseline are implementation-private. The hidden-API
-section follows DEX class definition order, independent of descriptor sorting.
+Members absent from the baseline are implementation-private unless declared by
+the pinned API28 SDK. The hidden-API section follows DEX class definition order,
+independent of descriptor sorting.
 """
 import argparse
+import gzip
 import hashlib
 import importlib.util
 import struct
 import zipfile
 import zlib
 from pathlib import Path
+
+
+def api28_public_members():
+    # Public/protected declarations from the official API28 revision 6 SDK.
+    # Pin the inventory so ordinary rebuilds also restore API28 signatures
+    # which changed declaring class in the API29 baseline.
+    data = gzip.decompress(Path(__file__).with_name('sdk28-public-members.txt.gz').read_bytes())
+    assert hashlib.sha256(data).hexdigest() == \
+        '3890fab86c518a724806d8875eba0d6e230e6c05ca3d683f60f7581395272836', \
+        'API28 public member inventory differs'
+    return set(data.decode('utf-8').splitlines())
+
+
+def sdk_public_members(sdk):
+    assert hashlib.sha256(sdk.read_bytes()).hexdigest() == \
+        'd20853d289a5161d9cf1c1268d7923076487d4fa68c970b0733e2d5a0ccfc3c5', \
+        'Expected the official API28 revision 6 android.jar'
+    spec = importlib.util.spec_from_file_location('class_reader',
+        Path(__file__).resolve().parents[1] / 'perf/check-jni-contract.py')
+    reader = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reader)
+    result = set()
+    with zipfile.ZipFile(sdk) as archive:
+        for entry in archive.namelist():
+            if not entry.endswith('.class'):
+                continue
+            owner = 'L' + entry[:-6] + ';->'
+            for name, descriptors in reader._class_members(archive.read(entry), public_only=True).items():
+                for descriptor in descriptors:
+                    result.add(owner + name + ('' if descriptor.startswith('(') else ':') + descriptor)
+    assert 'Landroid/app/ActivityManager$RunningTaskInfo;->topActivity:Landroid/content/ComponentName;' in result
+    assert result == api28_public_members(), 'SDK reader differs from the pinned API28 public member inventory'
+    return result
 
 
 def read_members(data):
@@ -83,7 +118,10 @@ def read_members(data):
     return classes, flags, entries, hidden
 
 
-def encode_jar(source, baselines, output):
+def encode_jar(source, baselines, output, public_members=None):
+    reencode = public_members is not None
+    if public_members is None:
+        public_members = api28_public_members()
     baseline_flags = {}
     for baseline in baselines:
         with zipfile.ZipFile(baseline) as archive:
@@ -94,10 +132,13 @@ def encode_jar(source, baselines, output):
     with zipfile.ZipFile(source) as archive:
         original = archive.read('classes.dex')
     classes, current, entries, hidden = read_members(original)
-    assert hidden is None, 'Encode fresh D8 output only'
+    assert hidden is None or reencode, 'Re-encoding requires the pinned SDK public API'
     flags = {name: baseline_flags.get(name, 2) for name in current}
-    cutoff = struct.unpack_from('<I', original, 52)[0]
-    assert all(entry[0] == 0x1000 for entry in entries if entry[3] >= cutoff)
+    public = current.keys() & public_members
+    restored = sorted(name for name in public if flags[name] != 0)
+    flags.update({name: 0 for name in public})
+    cutoff = hidden if hidden is not None else struct.unpack_from('<I', original, 52)[0]
+    assert all(entry[0] in (0xf000, 0x1000) for entry in entries if entry[3] >= cutoff)
     section = bytearray(4+4*len(classes))
     for index, signatures in enumerate(classes):
         if not signatures:
@@ -114,7 +155,7 @@ def encode_jar(source, baselines, output):
     result.extend(b'\0'*(-len(result) % 4))
     map_offset = len(result)
     entries = [(kind, unused, count, map_offset if kind == 0x1000 else offset)
-               for kind, unused, count, offset in entries]
+               for kind, unused, count, offset in entries if kind != 0xf000]
     entries.append((0xf000, 0, 1, cutoff))
     entries.sort(key=lambda entry: entry[3])
     result.extend(struct.pack('<I', len(entries)))
@@ -135,8 +176,12 @@ def encode_jar(source, baselines, output):
     with zipfile.ZipFile(source) as before, zipfile.ZipFile(output, 'x', zipfile.ZIP_DEFLATED) as after:
         for item in before.infolist():
             after.writestr(item, result if item.filename == 'classes.dex' else before.read(item.filename))
-    return {'members': len(flags), 'preserved': len(current.keys() & baseline_flags.keys()),
-            'private': len(current.keys()-baseline_flags.keys()), 'code_unchanged': True}
+    result = {'members': len(flags), 'preserved': len(current.keys() & baseline_flags.keys()),
+              'private': len(current.keys()-baseline_flags.keys()-public), 'code_unchanged': True}
+    result.update(sdk_public_members=len(public), restored_public_members=restored,
+                  non_sdk_flags_preserved=all(flags[name] == value
+                      for name, value in baseline_flags.items() if name in current and name not in public))
+    return result
 
 
 if __name__ == '__main__':
@@ -144,5 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--baseline', type=Path, action='append', default=[])
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--sdk', type=Path, help='Official API28 revision 6 android.jar')
     arguments = parser.parse_args()
-    print(encode_jar(arguments.source, arguments.baseline, arguments.output))
+    public = sdk_public_members(arguments.sdk) if arguments.sdk else None
+    print(encode_jar(arguments.source, arguments.baseline, arguments.output, public))
