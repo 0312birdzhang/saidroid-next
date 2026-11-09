@@ -6,7 +6,7 @@ runtime closure nor installs the result. Activation policy comes from the sealed
 runtime configuration. Run only in the build VM.
 """
 from pathlib import Path, PurePosixPath
-import argparse, hashlib, json, os, re, runpy, shutil, stat, subprocess
+import argparse, hashlib, json, os, re, runpy, shutil, stat, subprocess, sys
 
 
 def digest(path):
@@ -65,6 +65,9 @@ assert api in (28, 29), 'Unsupported Android API'
 assert digest(a.manifest) == a.manifest_sha256, 'Snapshot manifest hash mismatch'
 expected = json.loads(a.manifest.read_text())
 assert inventory(root) == expected, 'Payload differs from exact manifest'
+if api == 28:
+    subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'api28/prepare-core-linker.py'),
+                    '--root', str(root), '--release-id', a.release_id, '--check'], check=True)
 allowed_apks = {'share/manager.apk', 'system/framework/framework-res.apk'}
 assert {s for s in expected['files'] if s.endswith('.apk')} == allowed_apks
 assert not any(s.startswith(('data/', 'apps/', 'home/')) for s in expected['files'])
