@@ -465,3 +465,25 @@ performance, and official CTS gates are recorded separately by the device test
 owner. Neither these VM checks nor earlier J performance results certify those
 L device gates. Earlier K artifacts and partial cache outputs are preserved;
 its paused cache driver was terminated without starting the remaining jobs.
+
+## 2026-11-09 API28 native display repair
+
+The r323h release is `saildroid-runtime-api28-r323h-dev-20261109-0.321.59-66.aarch64`.
+Its native display library is built with
+`native/window/build-native-display-vm.py`, using the extracted r323g payload
+and its recorded cross-build inputs. The builder verifies a byte-identical
+baseline and records the candidate's source hashes, commands, dependencies,
+and exports. The native display README contains the build and regression
+commands.
+
+The workspace packaging record is
+`artifacts/wechat-qr-login-20261109/prepare_package.py`. It clones the verified
+r323g payload, installs the window library and its provenance, updates the
+integration metadata, and runs `prepare-core-linker.py` with the final release
+ID. `seal-setup-manifest-vm.py` generates the activation inventory before the
+Sailfish WSL SDK wrapper builds the aarch64 RPM. `verify_package.py` extracts
+the RPM and compares all payload bytes, modes, directories, and symlinks.
+
+The installed payload includes the recipe, native source, and build record
+under `share/build/native-display-events-20261109`. The RPM owns the release
+directory and carries the setup helper's checked installation scriptlets.

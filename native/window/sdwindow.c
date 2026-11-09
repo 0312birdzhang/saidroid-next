@@ -17,6 +17,7 @@
 #include <time.h>
 #include <errno.h>
 #include <stdatomic.h>
+#include "native-display-events.h"
 void sd_control_install(JNIEnv *env);
 int sd_activation_start(const char *path,int (*request)(void),int (*close_request)(void),int (*open_request)(const char *),int (*dump_request)(void));
 void sd_activation_stop(void);
@@ -707,7 +708,7 @@ static const struct wl_registry_listener registry_listener={global,global_remove
 static void buffer_released(void*data,struct wl_buffer*b){(void)b;struct buffer*slot=(struct buffer*)data;if(perf_on&&slot->perf_sample>=0&&(size_t)slot->perf_sample<perf_count)perf_samples[slot->perf_sample].release_ns=monotonic_ns();slot->busy=0;if(cover_pending&&(slot==&cover_buffers[0]||slot==&cover_buffers[1]))wake_host();}
 static const struct wl_buffer_listener buffer_listener={buffer_released};
 static int allocate_buffer(struct buffer*b){int fd=memfd_create("saildroid-window",MFD_CLOEXEC);if(fd<0)return-1;b->size=(size_t)width*height*4;if(ftruncate(fd,b->size)<0){close(fd);return-1;}b->pixels=mmap(NULL,b->size,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);if(b->pixels==MAP_FAILED){close(fd);return-1;}struct wl_shm_pool*pool=wl_shm_create_pool(shm,fd,b->size);b->object=wl_shm_pool_create_buffer(pool,0,width,height,width*4,buffer_format());wl_shm_pool_destroy(pool);close(fd);wl_buffer_add_listener(b->object,&buffer_listener,b);for(size_t i=0;i<b->size/4;i++)b->pixels[i]=swizzle_if_needed(0xff101820);b->perf_sample=-1;return 0;}
-static void frame_complete(void*d,struct wl_callback*callback,uint32_t time){(void)d;(void)time;wl_callback_destroy(callback);frame_callback=NULL;int64_t now=monotonic_ns();if(perf_on){perf_frame_callbacks++;perf_last_vsync_ns=now;perf_commits_since_vsync=0;perf_frame_gap_ns=perf_prev_frame_ns?now-perf_prev_frame_ns:-1;perf_prev_frame_ns=now;}if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)now);check_callback();}}
+static void frame_complete(void*d,struct wl_callback*callback,uint32_t time){(void)d;(void)time;wl_callback_destroy(callback);frame_callback=NULL;int64_t now=monotonic_ns();if(perf_on){perf_frame_callbacks++;perf_last_vsync_ns=now;perf_commits_since_vsync=0;perf_frame_gap_ns=perf_prev_frame_ns?now-perf_prev_frame_ns:-1;perf_prev_frame_ns=now;}sd_native_display_frame(now);if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)now);check_callback();}}
 static const struct wl_callback_listener frame_listener={frame_complete};
 static void publish(void){
  if(callbacks_available()&&early_window==1){
@@ -784,7 +785,9 @@ static void publish(void){
  pthread_mutex_unlock(&lock);
  if(bootstrap){
   if(++bootstrap_frames<=3)fprintf(stderr,"SDHWUI=unmapped_vsync_bootstrap|sequence=%u|presented=false\n",bootstrap_frames);
-  if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)monotonic_ns());check_callback();}
+  int64_t timestamp=monotonic_ns();
+  sd_native_display_frame(timestamp);
+  if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)timestamp);check_callback();}
  }
 }
 static void*run_window(void*unused){(void)unused;if(!early_window)callbacks_available();if(hardware_mode())sd_window_gpu_display();else display=wl_display_connect(NULL);if(!display){snprintf(failure,sizeof(failure),"Wayland connection failed: %s",strerror(errno));goto failed;}struct wl_registry*r=wl_display_get_registry(display);wl_registry_add_listener(r,&registry_listener,NULL);if(wl_display_roundtrip(display)<0||!compositor||!shm||(!shell&&!(surface_extension&&native_shell))){snprintf(failure,sizeof(failure),"Required Wayland globals unavailable");goto failed;}surface=wl_compositor_create_surface(compositor);if(surface_extension){extended_surface=qt_surface_extension_get_extended_surface(surface_extension,surface);qt_extended_surface_add_listener(extended_surface,&extended_listener,NULL);qt_extended_surface_set_content_orientation_mask(extended_surface,1);}create_window_role();wl_surface_commit(surface);while(!configured)if(wl_display_dispatch(display)<0)goto failed;if(prepare_display()<0)goto failed;if(hardware_mode()&&create_gpu_background()<0){snprintf(failure,sizeof(failure),"GPU host background failed");goto failed;}if(hardware_mode()){if(sd_hwui_background_startup(getenv("SAILDROID_STARTUP_ICON"),source_w,source_h)!=0){snprintf(failure,sizeof(failure),"GPU initial presentation failed");goto failed;}gpu_startup_mapped=1;early_gpu=early_window!=0;fprintf(stderr,"SDHOST=startup_mapped|pid=%d|surface=%p|android_frame=false\n",getpid(),(void*)surface);}
@@ -826,7 +829,9 @@ JNIEXPORT void JNICALL Java_SdWindowHost_nativeCoverFrame(JNIEnv*e,jclass c,jint
  if((*e)->ExceptionCheck(e)){free(pixels);return;}
  pthread_mutex_lock(&lock);free(cover_pixels);cover_pixels=pixels;cover_width=w;cover_height=h;cover_pending=1;pthread_mutex_unlock(&lock);wake_host();
 }
-JNIEXPORT void JNICALL Java_SdWindowHost_nativeRequestFrame(JNIEnv*e,jclass c){(void)e;(void)c;pthread_mutex_lock(&lock);if(perf_on)perf_request_frame_calls++;want_frame=1;pthread_mutex_unlock(&lock);wake_host();}
+int sd_window_display_available(void){return atomic_load(&running);}
+void sd_window_request_display_frame(void){pthread_mutex_lock(&lock);if(perf_on)perf_request_frame_calls++;want_frame=1;pthread_mutex_unlock(&lock);wake_host();}
+JNIEXPORT void JNICALL Java_SdWindowHost_nativeRequestFrame(JNIEnv*e,jclass c){(void)e;(void)c;sd_window_request_display_frame();}
 JNIEXPORT void JNICALL Java_SdWindowHost_nativePresent(JNIEnv*e,jclass c,jintArray data,jint w,jint h){
     (void)c;
     if(perf_on)perf_present_ns=monotonic_ns();
