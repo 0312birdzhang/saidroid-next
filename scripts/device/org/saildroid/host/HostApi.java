@@ -19,4 +19,6 @@ public final class HostApi {
     public static native String mceString(String method);
     public static native String thermalState();
     public static native boolean mceBoolean(String method);
+    public static native int acquireWakeLock(String sessionId, boolean screen, boolean renewing);
+    public static native void releaseWakeLock(String sessionId, boolean cancelScreenPause);
 }
