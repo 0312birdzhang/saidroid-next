@@ -260,6 +260,8 @@ void *sd_window_gpu_window(int id){
 static struct xdg_wm_base *shell;
 static struct xdg_surface *xdg_surface;
 static struct xdg_toplevel *toplevel;
+static struct wl_shell *native_shell;
+static struct wl_shell_surface *native_shell_surface;
 static struct qt_surface_extension *surface_extension;
 static struct qt_extended_surface *extended_surface;
 static struct wl_callback *frame_callback;
@@ -542,14 +544,17 @@ static void ping(void*d,struct xdg_wm_base*s,uint32_t serial){(void)d;xdg_wm_bas
 static const struct xdg_wm_base_listener shell_listener={.ping=ping};
 static void configure_surface(void*d,struct xdg_surface*s,uint32_t serial){(void)d;xdg_surface_ack_configure(s,serial);configured=1;}
 static const struct xdg_surface_listener surface_listener={.configure=configure_surface};
-static void configure_top(void *data, struct xdg_toplevel *top, int32_t w,
-                          int32_t h, struct wl_array *states) {
-    (void)data;
-    (void)top;
+static void configure_dimensions(int32_t w, int32_t h) {
     if (!width) {
         width = w > 0 ? w : (source_w > 0 ? source_w : 1080);
         height = h > 0 ? h : (source_h > 0 ? source_h : 2160);
     }
+}
+static void configure_top(void *data, struct xdg_toplevel *top, int32_t w,
+                          int32_t h, struct wl_array *states) {
+    (void)data;
+    (void)top;
+    configure_dimensions(w, h);
     uint32_t *state;
     int active = 0, fullscreen = 0;
     wl_array_for_each(state, states) {
@@ -585,6 +590,51 @@ static int prepare_display(void) {
 }
 static void close_top(void*d,struct xdg_toplevel*t){(void)d;(void)t;request_close();}
 static const struct xdg_toplevel_listener top_listener={.configure=configure_top,.close=close_top};
+static void native_shell_ping(void *data, struct wl_shell_surface *role, uint32_t serial) {
+    (void)data;
+    wl_shell_surface_pong(role, serial);
+}
+static void native_shell_configure(void *data, struct wl_shell_surface *role,
+                                   uint32_t edges, int32_t w, int32_t h) {
+    (void)data;
+    (void)role;
+    (void)edges;
+    configure_dimensions(w, h);
+    configured = 1;
+    fprintf(stderr, "SDWINDOW=configure|shell=wl_shell|size=%dx%d|fullscreen=requested\n", w, h);
+}
+static void native_shell_popup_done(void *data, struct wl_shell_surface *role) {
+    (void)data;
+    (void)role;
+}
+static const struct wl_shell_surface_listener native_shell_listener = {
+    .ping = native_shell_ping,
+    .configure = native_shell_configure,
+    .popup_done = native_shell_popup_done
+};
+static void create_window_role(void) {
+    // Lipstick's native wrapper fills the display. Its desktop XDG wrapper
+    // adds corner/cutout avoidance and applies the desktop window scale.
+    if (surface_extension && native_shell) {
+        native_shell_surface = wl_shell_get_shell_surface(native_shell, surface);
+        wl_shell_surface_add_listener(native_shell_surface, &native_shell_listener, NULL);
+        wl_shell_surface_set_title(native_shell_surface, title);
+        wl_shell_surface_set_class(native_shell_surface, app_id);
+        wl_shell_surface_set_toplevel(native_shell_surface);
+        wl_shell_surface_set_fullscreen(native_shell_surface,
+                WL_SHELL_SURFACE_FULLSCREEN_METHOD_DEFAULT, 0, NULL);
+        fprintf(stderr, "SDWINDOW=role|shell=wl_shell|wrapper=native\n");
+    } else {
+        xdg_surface = xdg_wm_base_get_xdg_surface(shell, surface);
+        xdg_surface_add_listener(xdg_surface, &surface_listener, NULL);
+        toplevel = xdg_surface_get_toplevel(xdg_surface);
+        xdg_toplevel_add_listener(toplevel, &top_listener, NULL);
+        xdg_toplevel_set_title(toplevel, title);
+        xdg_toplevel_set_app_id(toplevel, app_id);
+        xdg_toplevel_set_fullscreen(toplevel, NULL);
+        fprintf(stderr, "SDWINDOW=role|shell=xdg_shell|fullscreen_requested=true\n");
+    }
+}
 /* 输入链路取证（同 `<clinit>` 一样属于"不许靠猜"的地方）：Wayland 触摸到底有没有被
    合成器投递到我们这个表面？以前只有代码路径没有证据，点了没反应只能靠推断。
    这行打在 su!=surface 的早退之前，所以"匹配失败"和"根本没收到"能被区分开。 */
@@ -651,7 +701,7 @@ static uint32_t buffer_format(void){
     if(!abgr_buffers())return WL_SHM_FORMAT_ARGB8888;
     return shm_has_abgr8888?WL_SHM_FORMAT_ABGR8888:WL_SHM_FORMAT_XBGR8888;
 }
-static void global(void*d,struct wl_registry*r,uint32_t name,const char*iface,uint32_t version){(void)d;if(!strcmp(iface,"wl_subcompositor")){subcompositor=wl_registry_bind(r,name,&wl_subcompositor_interface,1);return;}if(!strcmp(iface,"wl_compositor"))compositor=wl_registry_bind(r,name,&wl_compositor_interface,version<3?version:3);else if(!strcmp(iface,"wl_shm")){shm=wl_registry_bind(r,name,&wl_shm_interface,1);wl_shm_add_listener(shm,&shm_listener,NULL);}else if(!strcmp(iface,"xdg_wm_base")){shell=wl_registry_bind(r,name,&xdg_wm_base_interface,1);xdg_wm_base_add_listener(shell,&shell_listener,NULL);}else if(!strcmp(iface,"qt_surface_extension")){surface_extension=wl_registry_bind(r,name,&qt_surface_extension_interface,1);legacy_subsurface_stack=getenv("SAILDROID_SUBSURFACE_NATIVE_STACK")==NULL;}else if(!strcmp(iface,"wl_seat")){seat=wl_registry_bind(r,name,&wl_seat_interface,version<3?version:3);wl_seat_add_listener(seat,&seat_listener,NULL);}}
+static void global(void*d,struct wl_registry*r,uint32_t name,const char*iface,uint32_t version){(void)d;if(!strcmp(iface,"wl_subcompositor")){subcompositor=wl_registry_bind(r,name,&wl_subcompositor_interface,1);return;}if(!strcmp(iface,"wl_compositor"))compositor=wl_registry_bind(r,name,&wl_compositor_interface,version<3?version:3);else if(!strcmp(iface,"wl_shm")){shm=wl_registry_bind(r,name,&wl_shm_interface,1);wl_shm_add_listener(shm,&shm_listener,NULL);}else if(!strcmp(iface,"wl_shell")){native_shell=wl_registry_bind(r,name,&wl_shell_interface,1);}else if(!strcmp(iface,"xdg_wm_base")){shell=wl_registry_bind(r,name,&xdg_wm_base_interface,1);xdg_wm_base_add_listener(shell,&shell_listener,NULL);}else if(!strcmp(iface,"qt_surface_extension")){surface_extension=wl_registry_bind(r,name,&qt_surface_extension_interface,1);legacy_subsurface_stack=getenv("SAILDROID_SUBSURFACE_NATIVE_STACK")==NULL;}else if(!strcmp(iface,"wl_seat")){seat=wl_registry_bind(r,name,&wl_seat_interface,version<3?version:3);wl_seat_add_listener(seat,&seat_listener,NULL);}}
 static void global_remove(void*d,struct wl_registry*r,uint32_t name){(void)d;(void)r;(void)name;}
 static const struct wl_registry_listener registry_listener={global,global_remove};
 static void buffer_released(void*data,struct wl_buffer*b){(void)b;struct buffer*slot=(struct buffer*)data;if(perf_on&&slot->perf_sample>=0&&(size_t)slot->perf_sample<perf_count)perf_samples[slot->perf_sample].release_ns=monotonic_ns();slot->busy=0;if(cover_pending&&(slot==&cover_buffers[0]||slot==&cover_buffers[1]))wake_host();}
@@ -737,7 +787,7 @@ static void publish(void){
   if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,frame_done,(jlong)monotonic_ns());check_callback();}
  }
 }
-static void*run_window(void*unused){(void)unused;if(!early_window)callbacks_available();if(hardware_mode())sd_window_gpu_display();else display=wl_display_connect(NULL);if(!display){snprintf(failure,sizeof(failure),"Wayland connection failed: %s",strerror(errno));goto failed;}struct wl_registry*r=wl_display_get_registry(display);wl_registry_add_listener(r,&registry_listener,NULL);if(wl_display_roundtrip(display)<0||!compositor||!shm||!shell){snprintf(failure,sizeof(failure),"Required Wayland globals unavailable");goto failed;}surface=wl_compositor_create_surface(compositor);if(surface_extension){extended_surface=qt_surface_extension_get_extended_surface(surface_extension,surface);qt_extended_surface_add_listener(extended_surface,&extended_listener,NULL);qt_extended_surface_set_content_orientation_mask(extended_surface,1);}xdg_surface=xdg_wm_base_get_xdg_surface(shell,surface);xdg_surface_add_listener(xdg_surface,&surface_listener,NULL);toplevel=xdg_surface_get_toplevel(xdg_surface);xdg_toplevel_add_listener(toplevel,&top_listener,NULL);xdg_toplevel_set_title(toplevel,title);xdg_toplevel_set_app_id(toplevel,app_id);xdg_toplevel_set_fullscreen(toplevel,NULL);wl_surface_commit(surface);while(!configured)if(wl_display_dispatch(display)<0)goto failed;if(prepare_display()<0)goto failed;if(hardware_mode()&&create_gpu_background()<0){snprintf(failure,sizeof(failure),"GPU host background failed");goto failed;}if(hardware_mode()){if(sd_hwui_background_startup(getenv("SAILDROID_STARTUP_ICON"),source_w,source_h)!=0){snprintf(failure,sizeof(failure),"GPU initial presentation failed");goto failed;}gpu_startup_mapped=1;early_gpu=early_window!=0;fprintf(stderr,"SDHOST=startup_mapped|pid=%d|surface=%p|android_frame=false\n",getpid(),(void*)surface);}
+static void*run_window(void*unused){(void)unused;if(!early_window)callbacks_available();if(hardware_mode())sd_window_gpu_display();else display=wl_display_connect(NULL);if(!display){snprintf(failure,sizeof(failure),"Wayland connection failed: %s",strerror(errno));goto failed;}struct wl_registry*r=wl_display_get_registry(display);wl_registry_add_listener(r,&registry_listener,NULL);if(wl_display_roundtrip(display)<0||!compositor||!shm||(!shell&&!(surface_extension&&native_shell))){snprintf(failure,sizeof(failure),"Required Wayland globals unavailable");goto failed;}surface=wl_compositor_create_surface(compositor);if(surface_extension){extended_surface=qt_surface_extension_get_extended_surface(surface_extension,surface);qt_extended_surface_add_listener(extended_surface,&extended_listener,NULL);qt_extended_surface_set_content_orientation_mask(extended_surface,1);}create_window_role();wl_surface_commit(surface);while(!configured)if(wl_display_dispatch(display)<0)goto failed;if(prepare_display()<0)goto failed;if(hardware_mode()&&create_gpu_background()<0){snprintf(failure,sizeof(failure),"GPU host background failed");goto failed;}if(hardware_mode()){if(sd_hwui_background_startup(getenv("SAILDROID_STARTUP_ICON"),source_w,source_h)!=0){snprintf(failure,sizeof(failure),"GPU initial presentation failed");goto failed;}gpu_startup_mapped=1;early_gpu=early_window!=0;fprintf(stderr,"SDHOST=startup_mapped|pid=%d|surface=%p|android_frame=false\n",getpid(),(void*)surface);}
 int64_t alloc_started=monotonic_ns();if(!hardware_mode()){for(int i=0;i<buffer_count;i++)if(allocate_buffer(&buffers[i])){snprintf(failure,sizeof(failure),"SHM allocation failed");goto failed;}if(perf_on)perf_alloc_ns=monotonic_ns()-alloc_started;buffers[0].busy=1;wl_surface_attach(surface,buffers[0].object,0,0);wl_surface_damage(surface,0,0,width,height);wl_surface_commit(surface);}wl_display_flush(display);pthread_mutex_lock(&lock);ready=1;if(perf_on)perf_ready_ns=monotonic_ns();pthread_cond_broadcast(&ready_condition);pthread_mutex_unlock(&lock);fprintf(stderr,"SDWINDOW=ready|size=%dx%d|source=%dx%d\n",width,height,source_w,source_h);while(running){publish();while(wl_display_prepare_read(display)!=0)if(wl_display_dispatch_pending(display)<0)goto done;wl_display_flush(display);struct pollfd fds[]={{wl_display_get_fd(display),POLLIN,0},{wake_fd,POLLIN,0}};int wait_ms=1000;pthread_mutex_lock(&lock);if(hardware_mode()&&!gpu_parent_mapped&&want_frame){int64_t left=bootstrap_next_ns-monotonic_ns();wait_ms=left>0?(int)((left+999999)/1000000):0;}pthread_mutex_unlock(&lock);int n=poll(fds,2,wait_ms);if(n<0&&errno==EINTR){wl_display_cancel_read(display);continue;}if(n<0){wl_display_cancel_read(display);break;}if(fds[0].revents&POLLIN){if(wl_display_read_events(display)<0)break;}else wl_display_cancel_read(display);if(fds[1].revents&POLLIN){uint64_t value;while(read(wake_fd,&value,sizeof(value))>0){}}if(wl_display_dispatch_pending(display)<0)break;}done:
     perf_dump();
     sd_activation_stop();
@@ -748,7 +798,7 @@ int64_t alloc_started=monotonic_ns();if(!hardware_mode()){for(int i=0;i<buffer_c
         (*vm)->DetachCurrentThread(vm);
         return NULL;
     }
-if(hardware_mode())sd_hwui_background_destroy();if(extended_surface){qt_extended_surface_destroy(extended_surface);extended_surface=NULL;}if(toplevel)xdg_toplevel_destroy(toplevel);if(xdg_surface)xdg_surface_destroy(xdg_surface);if(surface)wl_surface_destroy(surface);if(display){wl_display_flush(display);wl_display_disconnect(display);display=NULL;}if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,closed_event);check_callback();(*vm)->DetachCurrentThread(vm);}else _exit(0);return NULL;failed:perf_dump();pthread_mutex_lock(&lock);ready=-1;running=0;pthread_cond_broadcast(&ready_condition);pthread_mutex_unlock(&lock);if(display)wl_display_disconnect(display);if(thread_env)(*vm)->DetachCurrentThread(vm);return NULL;}
+if(hardware_mode())sd_hwui_background_destroy();if(extended_surface){qt_extended_surface_destroy(extended_surface);extended_surface=NULL;}if(native_shell_surface){wl_shell_surface_destroy(native_shell_surface);native_shell_surface=NULL;}if(toplevel)xdg_toplevel_destroy(toplevel);if(xdg_surface)xdg_surface_destroy(xdg_surface);if(surface)wl_surface_destroy(surface);if(display){wl_display_flush(display);wl_display_disconnect(display);display=NULL;}if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,closed_event);check_callback();(*vm)->DetachCurrentThread(vm);}else _exit(0);return NULL;failed:perf_dump();pthread_mutex_lock(&lock);ready=-1;running=0;pthread_cond_broadcast(&ready_condition);pthread_mutex_unlock(&lock);if(display)wl_display_disconnect(display);if(thread_env)(*vm)->DetachCurrentThread(vm);return NULL;}
 JNIEXPORT void JNICALL Java_SdWindowHost_nativeSelectHardware(JNIEnv*e,jclass c,jboolean enabled){
  (void)c;atomic_store(&selected_hardware,enabled?1:0);setenv("SAILDROID_HWUI",enabled?"1":"0",1);wake_host();
  pthread_mutex_lock(&lock);struct timespec deadline;clock_gettime(CLOCK_REALTIME,&deadline);deadline.tv_sec+=8;
