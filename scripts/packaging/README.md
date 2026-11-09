@@ -69,6 +69,15 @@ DNS and routes and derive validation from the matching ConnMan service's
 `online` state. The default Android network continues to use the host resolver
 through network ID zero.
 
+The r322z API28 address parser correction is recorded in
+`share/build/network-miniapp-api28-20261109`. Compile the canonical
+`scripts/device/SdConnectivitySnapshot.java` together with `SdConnectivity`
+and `SdHostNetworkObservation`. It uses API28's
+`NetworkUtils.numericToInetAddress` for strict numeric address parsing. Verify
+the installed build through an ordinary APK using `ConnectivityManager`,
+`Network.getAllByName`, and the public `Toast` API, including attachment,
+timeout, and cancellation.
+
 ## 2026-11-04 development example
 
 Evidence root:
