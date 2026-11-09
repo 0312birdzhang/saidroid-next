@@ -3,6 +3,7 @@
 #include <pulse/pulseaudio.h>
 #include <chrono>
 #include <thread>
+#include "../../scripts/api29/audio-connection-compat/source/audio-connection.hpp"
 
 namespace {
 struct Query {
@@ -10,6 +11,31 @@ struct Query {
   pa_context *context = nullptr;
   Json result={{"outputs",Json::array()},{"inputs",Json::array()}};
   std::string default_sink,default_source;
+  struct Connection {
+    uint32_t device;
+    std::string address;
+  };
+  std::vector<Connection> connections;
+
+  void port(const char *name, bool input, int available, bool active) {
+    uint32_t type = sd_audio_connection::port_device(name ? name : "", input);
+    if (type && sd_audio_connection::present(available, active))
+      connections.push_back({type, ""});
+  }
+
+  void endpoint(pa_proplist *properties, bool input) {
+    auto property = [properties](const char *key) {
+      const char *value = properties ? pa_proplist_gets(properties, key) : nullptr;
+      return std::string(value ? value : "");
+    };
+    std::string api = property("device.api");
+    if (property("device.bus") == "usb") api = "usb";
+    uint32_t type = sd_audio_connection::endpoint_device(
+        api, property("bluetooth.protocol"), property("api.bluez5.profile"), input);
+    std::string address = property("device.string");
+    if (address.empty()) address = property("api.bluez5.address");
+    if (type) connections.push_back({type, address});
+  }
   Query(){
     if(!loop)throw std::runtime_error("PulseAudio mainloop allocation failed");
     context=pa_context_new(pa_mainloop_get_api(loop),"SailDroid audio queries");
@@ -58,6 +84,49 @@ void sink(pa_context*,const pa_sink_info *info,int end,void *data){
   query.result["outputs"].push_back(row);
 }
 void source(pa_context*,const pa_source_info *i,int end,void *data){if(end||!i||i->monitor_of_sink!=PA_INVALID_INDEX)return;auto&q=*(Query*)data;Json row={{"id",i->index},{"name",i->name?i->name:""},{"description",i->description?i->description:""},{"rate",i->sample_spec.rate},{"channels",i->sample_spec.channels},{"muted",bool(i->mute)},{"active",i->state==PA_SOURCE_RUNNING},{"default",q.default_source==(i->name?i->name:"")},{"physical",bool(i->flags&PA_SOURCE_HARDWARE)}};q.result["inputs"].push_back(row);}
+void connection_sink(pa_context *, const pa_sink_info *info, int end, void *data) {
+  if (end || !info) return;
+  auto &query = *static_cast<Query *>(data);
+  query.endpoint(info->proplist, false);
+  bool droid = property(info->proplist, "device.api") == "droid-hal";
+  for (uint32_t index = 0; index < info->n_ports; index++) {
+    auto *port = info->ports[index];
+    query.port(port->name, false, droid ? 0 : port->available,
+               info->active_port && std::string(info->active_port->name) == port->name);
+  }
+}
+
+void connection_source(pa_context *, const pa_source_info *info, int end, void *data) {
+  if (end || !info || info->monitor_of_sink != PA_INVALID_INDEX) return;
+  auto &query = *static_cast<Query *>(data);
+  query.endpoint(info->proplist, true);
+  bool droid = property(info->proplist, "device.api") == "droid-hal";
+  for (uint32_t index = 0; index < info->n_ports; index++) {
+    auto *port = info->ports[index];
+    query.port(port->name, true, droid ? 0 : port->available,
+               info->active_port && std::string(info->active_port->name) == port->name);
+  }
+}
+
+void connection_card(pa_context *, const pa_card_info *info, int end, void *data) {
+  if (end || !info) return;
+  auto &query = *static_cast<Query *>(data);
+  bool droid = !property(info->proplist, "droid.hw_module").empty();
+  for (uint32_t index = 0; index < info->n_ports; index++) {
+    auto *port = info->ports[index];
+    // The droid HAL catalogue includes unplugged accessories. Built-in ports
+    // can exist without selection, while external routes require selection.
+    if (droid) {
+      uint32_t output = sd_audio_connection::port_device(port->name ? port->name : "", false);
+      uint32_t input = sd_audio_connection::port_device(port->name ? port->name : "", true);
+      if (output != 1 && output != 2 && input != 0x80000004u) continue;
+    }
+    if (port->direction & PA_DIRECTION_OUTPUT)
+      query.port(port->name, false, port->available, false);
+    if (port->direction & PA_DIRECTION_INPUT)
+      query.port(port->name, true, port->available, false);
+  }
+}
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_saildroid_host_HostApi_audioSnapshot(JNIEnv*e,jclass){
  try{Query q;q.wait(pa_context_get_server_info(q.context,server,&q));q.wait(pa_context_get_sink_info_list(q.context,sink,&q));q.wait(pa_context_get_source_info_list(q.context,source,&q));return e->NewStringUTF(q.result.dump().c_str());}
@@ -70,6 +139,33 @@ extern "C" JNIEXPORT jint JNICALL Java_org_saildroid_host_HostApi_ringerMode(JNI
  if(!result){g_clear_error(&error);e->ThrowNew(e->FindClass("java/lang/IllegalStateException"),"Host ringing profile unavailable");return 0;}
  const char*profile=nullptr;g_variant_get(result,"(&s)",&profile);int mode=!strcmp(profile,"silent")?0:2;g_variant_unref(result);return mode;
 }
+static jint connection_state(JNIEnv *env, jclass, jint device, jstring address) {
+  const char *chars = address ? env->GetStringUTFChars(address, nullptr) : nullptr;
+  if (address && !chars) return 0;
+  std::string requested = chars ? chars : "";
+  if (chars) env->ReleaseStringUTFChars(address, chars);
+  try {
+    Query query;
+    query.wait(pa_context_get_card_info_list(query.context, connection_card, &query));
+    query.wait(pa_context_get_sink_info_list(query.context, connection_sink, &query));
+    query.wait(pa_context_get_source_info_list(query.context, connection_source, &query));
+    int state = 0;
+    for (const auto &row : query.connections) {
+      if (sd_audio_connection::device_matches(uint32_t(device), row.device)
+          && sd_audio_connection::address_matches(requested, row.address)) {
+        state = 1;
+        break;
+      }
+    }
+    fprintf(stderr, "SDAUDIO=device_connection|device=%u|state=%d|source=pulseaudio-ports\n",
+            uint32_t(device), state);
+    return state;
+  } catch (const std::exception &failure) {
+    fprintf(stderr, "SDAUDIO=device_connection_unavailable|reason=%s\n", failure.what());
+    return 0;
+  }
+}
+
 static jclass audio_class;
 static jint ports(JNIEnv*e,jclass,jobject list,jintArray gen){return e->CallStaticIntMethod(audio_class,e->GetStaticMethodID(audio_class,"listPorts","(Ljava/util/ArrayList;[I)I"),list,gen);}
 static jint patches(JNIEnv*e,jclass,jobject list,jintArray gen){return e->CallStaticIntMethod(audio_class,e->GetStaticMethodID(audio_class,"listPatches","(Ljava/util/ArrayList;[I)I"),list,gen);}
@@ -93,6 +189,7 @@ extern "C" JNIEXPORT void JNICALL Java_SdAudio_nativeInstall(JNIEnv*e,jclass c,j
  jclass audio_system=e->FindClass("android/media/AudioSystem");
  if(!audio_system)return;
  JNINativeMethod system[]={
+  {(char*)"getDeviceConnectionState",(char*)"(ILjava/lang/String;)I",(void*)connection_state},
   {(char*)"getPrimaryOutputSamplingRate",(char*)"()I",(void*)primary_rate},
   {(char*)"getPrimaryOutputFrameCount",(char*)"()I",(void*)primary_frames},
   {(char*)"listAudioPorts",(char*)"(Ljava/util/ArrayList;[I)I",(void*)ports},
