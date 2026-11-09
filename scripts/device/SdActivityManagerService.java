@@ -443,7 +443,13 @@ public final class SdActivityManagerService implements InvocationHandler {
         if ("reportSizeConfigurations".equals(name)) {
             HostedActivity current=activity((IBinder)args[0]);current.horizontalConfigurations=args[1]==null?null:((int[])args[1]).clone();current.verticalConfigurations=args[2]==null?null:((int[])args[2]).clone();current.smallestConfigurations=args[3]==null?null:((int[])args[3]).clone();return null;
         }
-        if ("getTaskForActivity".equals(name)) return activity((IBinder) args[0]).taskId;
+        if ("getTaskForActivity".equals(name)) {
+            synchronized (this) {
+                // Android returns -1 for an Activity outside its task registry.
+                HostedActivity current = activities.get((IBinder) args[0]);
+                return current == null ? -1 : current.taskId;
+            }
+        }
         if ("setTaskDescription".equals(name)) {
             setTaskDescription((IBinder) args[0], (ActivityManager.TaskDescription) args[1]);
             return null;
