@@ -66,6 +66,10 @@ static bool valid_package(const std::string &s) {
   return std::regex_match(
       s, std::regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+"));
 }
+static bool valid_component(const std::string &s) {
+  return std::regex_match(
+      s, std::regex("[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+"));
+}
 static void launch(std::vector<std::string> args) {
   std::vector<char *> av;
   std::string exe = (component / "libexec/saildroid-app").string();
@@ -274,7 +278,7 @@ static void dispatch(GDBusConnection *, const gchar *sender, const gchar *,
       launch({"--package", a});
     } else if (m == "StartService" || m == "StartActivityProcess" || m == "StartProviderProcess") {
       g_variant_get(params, "(&s&s&s)", &a, &b, &c);
-      if (!valid_package(a) || !valid_package(b) ||
+      if (!valid_package(a) || !valid_component(b) ||
           !std::regex_match(c, std::regex("[A-Za-z0-9_.]+(:[A-Za-z0-9_.]+)?")))
         throw std::runtime_error("Invalid service identity");
       auto it = entries.find(a);
