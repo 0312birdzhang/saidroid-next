@@ -135,6 +135,14 @@ public final class WakeLocksProbe {
             catch (SecurityException expected) {}
             try { service.acquireWakeLock(new Binder(), 1, "attributed", "com.tencent.mm", new WorkSource(123), null); throw new AssertionError("Attribution accepted"); }
             catch (SecurityException expected) {}
+            WorkSource chained = new WorkSource();
+            chained.createWorkChain().addNode(123, "Background worker");
+            try { service.acquireWakeLock(new Binder(), 1, "chained", "com.tencent.mm", chained, null); throw new AssertionError("Chained attribution accepted"); }
+            catch (SecurityException expected) {}
+            System.setProperty("saildroid.test.stats-granted", "true");
+            try { service.acquireWakeLock(new Binder(), 1, "privileged chain", "com.tencent.mm", chained, null); throw new AssertionError("Unimplemented attribution accepted"); }
+            catch (UnsupportedOperationException expected) {}
+            System.clearProperty("saildroid.test.stats-granted");
             try { manager.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "wake display").acquire(); throw new AssertionError("Unsupported transition accepted"); }
             catch (UnsupportedOperationException expected) {}
             FutureTask<Void> worker = new FutureTask<Void>(() -> {
@@ -174,7 +182,7 @@ def main():
             ('dalvik/system/VMRuntime.java', 'package dalvik.system; public class VMRuntime { private static final VMRuntime runtime = new VMRuntime(); public static VMRuntime getRuntime() { return runtime; } public Object newUnpaddedArray(Class<?> type, int count) { return java.lang.reflect.Array.newInstance(type, count); } }'),
             ('android/content/Context.java', 'package android.content; public class Context { public String getOpPackageName() { return "com.tencent.mm"; } }'),
             ('SdApkPackage.java', 'public class SdApkPackage { public static final String APK = "fixture.apk", NAME = "com.tencent.mm"; }'),
-            ('SdAppPermissions.java', 'public class SdAppPermissions { public SdAppPermissions(String apk, String owner) {} public boolean holds(String name) { return name.equals("android.permission.WAKE_LOCK") && !Boolean.getBoolean("saildroid.test.wake-denied"); } }'),
+            ('SdAppPermissions.java', 'public class SdAppPermissions { public SdAppPermissions(String apk, String owner) {} public boolean holds(String name) { return (name.equals("android.permission.WAKE_LOCK") && !Boolean.getBoolean("saildroid.test.wake-denied")) || (name.equals("android.permission.UPDATE_DEVICE_STATS") && Boolean.getBoolean("saildroid.test.stats-granted")); } }'),
             ('SdHostState.java', 'public class SdHostState { public static String string(String name) { return "on"; } public static boolean bool(String name) { return false; } }'),
             ('SdRuntimeDiagnostics.java', 'public class SdRuntimeDiagnostics { public static UnsupportedOperationException unsupported(String owner, java.lang.reflect.Method method) { return new UnsupportedOperationException(owner + " " + method); } }'),
             ('org/saildroid/host/HostApi.java', HOST), ('WakeLocksProbe.java', PROBE)]

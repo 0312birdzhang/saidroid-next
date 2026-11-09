@@ -29,7 +29,7 @@ public final class SdPower implements InvocationHandler {
         if (!permissions.holds("android.permission.WAKE_LOCK")) throw new SecurityException("Wake lock permission required");
     }
     private void requireAttribution(WorkSource source) {
-        if (source != null && source.size() > 0) {
+        if (source != null && !source.isEmpty()) {
             if (!permissions.holds("android.permission.UPDATE_DEVICE_STATS")) throw new SecurityException("Wake lock attribution permission required");
             throw new UnsupportedOperationException("Host wake lock attribution unavailable");
         }
