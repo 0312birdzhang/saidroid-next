@@ -979,7 +979,10 @@ public final class SdWebViewProvider {
                                 if (dispatchSeq <= 3) log("diag|predispatch|seq=" + dispatchSeq);
                                 return Boolean.FALSE;
                             }
-                            if (n.equals("setLayoutParams")) return null;
+                            if (n.equals("setLayoutParams")) {
+                                access.super_setLayoutParams((android.view.ViewGroup.LayoutParams) args[0]);
+                                return null;
+                            }
                             if (n.equals("shouldDelayChildPressedState")) return Boolean.FALSE;
                             if (n.equals("getAccessibilityNodeProvider")) return null;
                             if (n.equals("onCreateInputConnection")) {

@@ -78,6 +78,40 @@ the installed build through an ordinary APK using `ConnectivityManager`,
 `Network.getAllByName`, and the public `Toast` API, including attachment,
 timeout, and cancellation.
 
+## 2026-11-09 WPE runtime dependencies
+
+The r323b runtime records its engine inputs in
+`share/build/webview-runtime-20261109/runtime-manifest.json`. Install the
+runtime and these aarch64 engine packages in one RPM transaction.
+
+| Package | Version and release |
+| --- | --- |
+| libepoxy | 1.5.11-768.1 |
+| libwpe | 1.17.0-768.1 |
+| wpebackend-fdo | 1.17.0-768.1 |
+| wpewebkit2 | 2.54.2-768.1 |
+| wpewebkit2-qt5 | 2.54.2-768.1 |
+
+Verify the repository signature, each RPM signature, and the payload SHA-256
+from the signed primary metadata before staging. The engine repository is
+`https://specsierra.github.io/atlantic-engine/aarch64/`. Build 768.1 corresponds
+to Atlantic source revision `b36d176b1374aab8c6b4bde582d10bf6ff50819e`.
+
+WebKit uses its compiled `/opt/wpe-sfos` helper paths. SailDroid packages the
+required compatibility library closure under its own `lib/webview` directory,
+with source records and license notices. `sdwebview-host` expands
+`${SD_COMPONENT}` to its canonical release root when configuring the isolated
+process. The libsoup boundary resolves its SONAME through that configured
+library path. The runtime RPM pins all five engine dependencies.
+
+After installation, verify both the engine RPM inventories and SailDroid's
+activation seal. Run an ordinary APK through the public Android WebView API
+to check HTML loading, JavaScript evaluation, an annotated Java interface,
+HTTPS loading, and emitted renderer frames. The provider forwards layout
+parameters through `WebView.PrivateAccess.super_setLayoutParams`, so Android
+parents can measure a WebView attached with `Activity.setContentView`. Package
+that provider change with boot images compiled from the same runtime JAR.
+
 ## 2026-11-04 development example
 
 Evidence root:
