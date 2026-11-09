@@ -38,6 +38,7 @@ public final class SdServices {
         register("input", SdInputManager.binder());
         register("input_method", SdInputMethods.binder());
         register("textservices", SdTextServices.binder());
+        register("appwidget", SdAppWidgets.binder());
         register("display", SdDisplayShim.binder());
         register("mount", SdStorageManager.binder());
         register("user", SdUsers.binder());
