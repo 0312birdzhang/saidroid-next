@@ -148,6 +148,27 @@ used boot ID `4617bb3e-7fb9-4a85-8459-9c5a640a78bf`.
 The QQ acceptance step is to choose a file from its send-file page and confirm
 the selection returns to QQ.
 
+## 2026-11-10 document picker GPU rendering
+
+The r323k regression APK disabled application hardware acceleration. With
+acceleration enabled, the picker attempted software drawing into a GPU Surface
+and ViewRootImpl reported `Could not lock surface`. `SdDocumentPicker` now sets
+`ActivityInfo.FLAG_HARDWARE_ACCELERATED` when the selected window backend uses
+HWUI. The fixture checks its actual DecorView acceleration before selecting files.
+
+The same accelerated APK failed on r323k and passed on r323l. Both accelerated
+and software variants passed selection, cancellation, repeated requests and
+persisted cross-process reads. The accelerated run created picker EGL windows
+and completed GPU swaps with zero surface-lock errors.
+
+The installed RPM is
+`saildroid-runtime-api28-r323l-dev-20261110-0.321.63-70.aarch64`, with SHA256
+`1ed3cb17c3636e98ec50891a5466cc0cc31cd3d3d32c8dfd80b0c6510e247f09`.
+Its extracted inventory contains 3633 files and 15 symlinks. Runtime rebuild
+commands, source hashes and native boot-image inputs are packaged under
+`share/build/document-picker-rendering-20261110`. The runtime update preserves
+307 other classes and all 2755 existing member access flags.
+
 ## 2026-11-09 API28 Java compatibility updates
 
 Partial runtime updates compile the changed Java sources with `javac --release 8`

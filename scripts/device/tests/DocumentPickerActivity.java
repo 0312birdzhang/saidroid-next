@@ -109,6 +109,11 @@ public final class DocumentPickerActivity extends Activity {
                     automate(expected, attempt + 1);
                     return;
                 }
+                boolean hardware = (getApplicationInfo().flags
+                        & android.content.pm.ApplicationInfo.FLAG_HARDWARE_ACCELERATED) != 0;
+                require(picker.getWindow().getDecorView().isHardwareAccelerated() == hardware,
+                        "Picker rendering matches the application backend");
+                if (expected == 1) System.err.println("DOCUMENT_PICKER=rendering_passed|hardware=" + hardware);
                 require(list.getAdapter().getCount() == 2, "MIME filter and linked-file exclusion");
                 require("a.txt".equals(list.getAdapter().getItem(0)), "Fixture folder listing");
                 if (expected == 3) { picker.finish(); return; }

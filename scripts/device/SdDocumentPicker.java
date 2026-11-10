@@ -75,6 +75,7 @@ public final class SdDocumentPicker extends Activity {
         info.processName = SdApkPackage.processName();
         info.applicationInfo = SdApkPackage.applicationInfo();
         info.theme = android.R.style.Theme_Material_Light_NoActionBar;
+        if (SdWindowHost.hardware()) info.flags |= ActivityInfo.FLAG_HARDWARE_ACCELERATED;
         info.enabled = true;
         info.exported = true;
         info.nonLocalizedLabel = "选择文件";
