@@ -28,7 +28,7 @@ public final class SdPackageManagerService implements InvocationHandler {
         if(runner==null)return PackageManager.PERMISSION_DENIED;
         return new SdAppPermissions(runner.sourceDir,owner).holds(name)?PackageManager.PERMISSION_GRANTED:PackageManager.PERMISSION_DENIED;
     }
-    private static ProviderInfo provider(String authority){for(PackageParser.Provider p:SdApkPackage.parsed().providers)if(p.info.authority!=null&&Arrays.asList(p.info.authority.split(";")).contains(authority)){ProviderInfo result=new ProviderInfo(p.info);result.applicationInfo=SdApkPackage.applicationInfo();result.metaData=p.metaData;return result;}return null;}
+    private static ProviderInfo provider(String authority){if(SdDocumentsProvider.AUTHORITY.equals(authority))return SdDocumentsProvider.info();for(PackageParser.Provider p:SdApkPackage.parsed().providers)if(p.info.authority!=null&&Arrays.asList(p.info.authority.split(";")).contains(authority)){ProviderInfo result=new ProviderInfo(p.info);result.applicationInfo=SdApkPackage.applicationInfo();result.metaData=p.metaData;return result;}return null;}
     private static PackageParser.Package platform;
     private static synchronized PermissionInfo permissionInfo(String name,int flags)throws Exception{
         if(name==null)throw new IllegalArgumentException("Permission name required");

@@ -420,6 +420,21 @@ public final class SdActivityManagerService implements InvocationHandler {
         if ("publishContentProviders".equals(name)) {
             SdContentProviders.publish((java.util.List<android.app.ContentProviderHolder>)args[1]);return null;
         }
+        if ("getProviderMimeType".equals(name)) {
+            if((Integer)args[1]!=Process.myUserHandle().getIdentifier())throw new SecurityException("Cross-user document MIME access unavailable");
+            android.net.Uri uri=(android.net.Uri)args[0];
+            try(android.content.ContentProviderClient provider=android.app.ActivityThread.currentApplication().getContentResolver().acquireContentProviderClient(uri)){
+                return provider==null?null:provider.getType(uri);
+            }
+        }
+        if ("takePersistableUriPermission".equals(name)||"releasePersistableUriPermission".equals(name)) {
+            if(args[2]!=null&&!SdApkPackage.NAME.equals(args[2])||(Integer)args[3]!=Process.myUserHandle().getIdentifier())throw new SecurityException("Document grant owner differs");
+            SdDocumentsProvider.persist((android.net.Uri)args[0],(Integer)args[1],"releasePersistableUriPermission".equals(name));return null;
+        }
+        if ("getPersistedUriPermissions".equals(name)) {
+            if(!SdApkPackage.NAME.equals(args[0]))throw new SecurityException("Document grant owner differs");
+            return new android.content.pm.ParceledListSlice<android.content.UriPermission>((Boolean)args[1]?SdDocumentsProvider.persisted():java.util.Collections.<android.content.UriPermission>emptyList());
+        }
         if ("checkPermission".equals(name)) {
             return checkLocalPermission((String) args[0], (Integer) args[1], (Integer) args[2]);
         }

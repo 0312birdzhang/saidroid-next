@@ -93,6 +93,61 @@ application had OOM adjustment zero, cleared active capability sets and
 `no_new_privs=1`. The installation and device probes retained a single boot ID.
 QQ's video picker still requires a physical visual retest.
 
+## 2026-11-10 local document selection
+
+QQ's resource `0x7f121541` reports a missing `GET_CONTENT` or `OPEN_DOCUMENT`
+handler. `SdDocumentPicker` supplies the fallback intent handler in the
+requesting application's task. It browses the real SailDroid shared directory
+and the user's Downloads, Documents, Pictures, Videos and Music directories.
+Directory listing runs on a worker, with a 10000-entry limit per directory.
+MIME filters, cancellation, initial external-storage document URIs, repeated
+requests and selections of up to 256 files use the Activity result path.
+
+`SdDocumentsProvider` stores selected read handles in an app-owned SQLite
+database. Each handle resolves to a readable regular file in those shared
+folders. Queries return the actual name, size, MIME type and path. File opens
+validate the canonical path and use `O_NOFOLLOW`. `OPEN_DOCUMENT` handles
+support persisted read grants and access from the application's other
+declared processes. The first MIME lookup is handled through ActivityManager's
+provider MIME entry point.
+
+The native host and manager share component-name validation for Activity,
+Service and Provider startup, including nested classes with `$`. The native
+build records a byte-identical baseline and verifies the candidate's dynamic
+dependencies, runpath and exported interfaces.
+
+The workspace recipe is `artifacts/qq-file-path-20261110/prepare_package_k.py`.
+It builds the r323k payload from the verified r323i release, installs the
+308-class runtime and all 42 matching boot-image outputs, binds the final
+linker paths and seals the activation manifest. The runtime merger retains
+2666 existing member flags and encodes 89 new internal members. The RPM build
+uses `SailfishOS-latest-aarch64` through `tools/sailfish-wsl-build.sh`. Build
+commands, source hashes and image inputs are packaged under
+`share/build/document-picker-20261110`.
+
+The ordinary APK fixture is `scripts/device/tests/DocumentPickerActivity.java`.
+Its file operations and automated selections target its own temporary shared
+files. It exercises single and multiple results, openable metadata, document
+bytes, linked replacements, persisted reads in a declared secondary process,
+cancellation, removed files and a repeated request to the live picker.
+
+Device validation on Xiaomi Pad 5/NABU installed
+`saildroid-runtime-api28-r323k-dev-20261110-0.321.62-69.aarch64` and passed
+`rpm -V` plus setup status `ready`. The RPM SHA256 is
+`b7c0f65a25fd5b048b46d17c844cef3e383eb6c3d43da100624193d1ab1533fc`.
+Its extracted inventory contains 3623 files and 15 symlinks.
+
+The ordinary APK fixture passed single and multiple results, first MIME lookup,
+actual file bytes, linked replacement rejection, persisted reads from its
+nested secondary Activity, cancellation, removed files and repeated requests.
+The process ran with OOM adjustment zero, all four Linux capability sets zero
+and `no_new_privs=1`. Fixture files, app data, process state and diagnostic
+backups were cleaned after verifying their identities. Installation and tests
+used boot ID `4617bb3e-7fb9-4a85-8459-9c5a640a78bf`.
+
+The QQ acceptance step is to choose a file from its send-file page and confirm
+the selection returns to QQ.
+
 ## 2026-11-09 API28 Java compatibility updates
 
 Partial runtime updates compile the changed Java sources with `javac --release 8`

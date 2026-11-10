@@ -15,6 +15,7 @@ public final class SdContentProviders {
     private static ContentProviderHolder instrumentationFiles;
     private static ContentProviderHolder downloads;
     private static ContentProviderHolder media;
+    private static ContentProviderHolder documents;
     private static final java.util.HashMap<String,ContentProviderHolder> providers=new java.util.HashMap<String,ContentProviderHolder>();
     private static String registryName(String authority){
         return "saidroid.provider."+SdKernelServices.processName(SdApkPackage.NAME,authority).substring("saidroid.process.".length());
@@ -34,6 +35,7 @@ public final class SdContentProviders {
         if("android.tradefed.contentprovider".equals(authority)&&SdInstrumentation.requested())return instrumentationFiles();
         if("downloads".equals(authority))return downloads();
         if("media".equals(authority))return media();
+        if(SdDocumentsProvider.AUTHORITY.equals(authority))return documents();
         if(!"settings".equals(authority)){
             synchronized(SdContentProviders.class){ContentProviderHolder current=providers.get(authority);if(current!=null)return current;}
             for(android.content.pm.PackageParser.Provider declared:SdApkPackage.parsed().providers){
@@ -74,6 +76,15 @@ public final class SdContentProviders {
             SdMediaProvider provider=new SdMediaProvider();provider.attachInfo(context,info);media=new ContentProviderHolder(info);media.provider=provider.getIContentProvider();media.connection=new Binder();media.noReleaseNeeded=true;
         }
         return media;
+    }
+    private static synchronized ContentProviderHolder documents(){
+        if(documents==null){
+            Context context=ActivityThread.currentApplication();if(context==null)throw new IllegalStateException("Documents require a bound app");
+            ProviderInfo info=SdDocumentsProvider.info();
+            SdDocumentsProvider provider=new SdDocumentsProvider();provider.attachInfo(context,info);
+            documents=new ContentProviderHolder(info);documents.provider=provider.getIContentProvider();documents.connection=new Binder();documents.noReleaseNeeded=true;
+        }
+        return documents;
     }
     private static synchronized ContentProviderHolder settings(){
         if(settings==null){

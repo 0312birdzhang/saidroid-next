@@ -66,10 +66,6 @@ static bool valid_package(const std::string &s) {
   return std::regex_match(
       s, std::regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+"));
 }
-static bool valid_component(const std::string &s) {
-  return std::regex_match(
-      s, std::regex("[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+"));
-}
 static void launch(std::vector<std::string> args) {
   std::vector<char *> av;
   std::string exe = (component / "libexec/saildroid-app").string();

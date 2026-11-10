@@ -340,10 +340,10 @@ int main(int argc, char **argv) {
       throw std::runtime_error("Desktop identity differs");
     if (!install.empty() && !manager)
       throw std::runtime_error("Only installer accepts APKs");
-    if (!service.empty() && (!valid(service) || process.empty() ||
+    if (!service.empty() && (!valid_component(service) || process.empty() ||
                              (owner.empty() && action.empty())))
       throw std::runtime_error("Service ownership required");
-    if (!activity.empty() && (!valid(activity) || !service.empty() || process.empty() ||
+    if (!activity.empty() && (!valid_component(activity) || !service.empty() || process.empty() ||
                               (owner.empty() && action.empty())))
       throw std::runtime_error("Activity process ownership required");
     if (!install.empty()) {
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
       if (install.size() > 16000)
         throw std::runtime_error("APK source is too long");
     }
-    if (!provider.empty() && (!valid(provider) || !service.empty() || !activity.empty() || process.empty() ||
+    if (!provider.empty() && (!valid_component(provider) || !service.empty() || !activity.empty() || process.empty() ||
                               (owner.empty() && action.empty())))
       throw std::runtime_error("Provider process ownership required");
     instance =

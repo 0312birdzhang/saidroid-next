@@ -53,6 +53,7 @@ public final class SdApkPackage {
     public static String providerProcess(ProviderInfo info){return info.processName!=null?info.processName:applicationInfo().processName;}
     private static ActivityInfo activity(PackageParser.Activity source){ActivityInfo result=new ActivityInfo(source.info);result.applicationInfo=applicationInfo();if(result.processName==null)result.processName=NAME;result.metaData=source.metaData;return result;}
     public static ActivityInfo activityInfo(ComponentName component,int flags){
+        if(component!=null&&NAME.equals(component.getPackageName())&&SdDocumentPicker.class.getName().equals(component.getClassName()))return SdDocumentPicker.activityInfo();
         if(component!=null&&SdPermissionController.PACKAGE.equals(component.getPackageName())&&SdPermissionController.class.getName().equals(component.getClassName()))return SdPermissionController.settingsActivityInfo();
         if(component==null||!NAME.equals(component.getPackageName()))return null;
         for(PackageParser.Activity candidate:parsed().activities)if(candidate.info.name.equals(component.getClassName())){
@@ -95,6 +96,7 @@ public final class SdApkPackage {
                 if(match>=0){ResolveInfo resolved=new ResolveInfo();resolved.activityInfo=activity(candidate);resolved.match=match;resolved.priority=filter.getPriority();resolved.filter=filter;result.add(resolved);break;}
             }
         }
+        if(result.isEmpty()){ResolveInfo document=SdDocumentPicker.resolve(intent,type);if(document!=null)result.add(document);}
         return result;
     }
     public static PackageInfo packageInfo(int flags){
