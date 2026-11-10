@@ -3,6 +3,7 @@ import android.content.*;
 import android.database.Cursor;
 import android.database.sqlite.*;
 import android.graphics.BitmapFactory;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.*;
 import android.webkit.MimeTypeMap;
@@ -72,9 +73,34 @@ public final class SdMediaProvider extends ContentProvider {
                 else while(true){try(Cursor collision=db.query("media",new String[]{"_data"},"_id=?",new String[]{Long.toString(id)},null,null,null)){if(!collision.moveToFirst())break;}id=(id+1)&0x7fffffff;}
             }
             ContentValues row=new ContentValues();row.put("_id",id);row.put("_data",file.getCanonicalPath());row.put("_display_name",name);row.put("_size",file.length());row.put("mime_type",mime);row.put("title",name.substring(0,dot));row.put("date_added",file.lastModified()/1000);row.put("date_modified",file.lastModified()/1000);row.put("datetaken",file.lastModified());BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;if(kind==1)BitmapFactory.decodeFile(file.getCanonicalPath(),size);row.put("width",Math.max(0,size.outWidth));row.put("height",Math.max(0,size.outHeight));row.put("orientation",0);row.put("duration",0);row.put("bucket_id",file.getParent().toLowerCase(Locale.ROOT).hashCode());row.put("bucket_display_name",file.getParentFile().getName());row.put("media_type",kind);row.put("relative_path",root.getName()+"/");row.put("volume_name","external_primary");
+            if(kind==3)videoMetadata(file,row);
             if(db.insertWithOnConflict("media",null,row,SQLiteDatabase.CONFLICT_REPLACE)<0)throw new SQLiteException("Cannot update media metadata");count++;
         }
         return count;
+    }
+    private static long metadataNumber(MediaMetadataRetriever retriever, int key) {
+        String value = retriever.extractMetadata(key);
+        return value == null ? 0 : Math.max(0, Long.parseLong(value));
+    }
+    private void videoMetadata(File file, ContentValues row) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(file.getAbsolutePath());
+            long width = metadataNumber(retriever, MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            long height = metadataNumber(retriever, MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            long duration = metadataNumber(retriever, MediaMetadataRetriever.METADATA_KEY_DURATION);
+            long rotation = metadataNumber(retriever, MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            row.put("width", width);
+            row.put("height", height);
+            row.put("duration", duration);
+            row.put("orientation", rotation);
+            System.err.println("SDMEDIASTORE=video_metadata|width=" + width + "|height=" + height
+                    + "|duration_ms=" + duration + "|rotation=" + rotation);
+        } catch (RuntimeException failure) {
+            System.err.println("SDMEDIASTORE=video_metadata_unavailable|type=" + failure.getClass().getName());
+        } finally {
+            retriever.release();
+        }
     }
     private void readPermission(){getContext().enforceCallingOrSelfPermission("android.permission.READ_EXTERNAL_STORAGE","Reading media requires explicit authorization");}
     private String uriWhere(Uri uri){

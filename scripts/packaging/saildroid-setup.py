@@ -83,6 +83,18 @@ def require(ok, message):
         raise RuntimeError(message)
 
 
+def native_bootstrap_capability(runtime):
+    bootstrap = runtime.get('native_bootstrap')
+    if bootstrap is None:
+        return 'cap_sys_resource=ep'
+    require(isinstance(bootstrap, dict)
+            and bootstrap.get('schema') == 'saildroid-native-bootstrap-v1'
+            and set(bootstrap) == {'schema', 'capabilities'}
+            and bootstrap['capabilities'] in ('cap_sys_resource=ep', 'cap_dac_override,cap_sys_resource=ep'),
+            'Unsupported native bootstrap capability policy')
+    return bootstrap['capabilities']
+
+
 def digest(path):
     h = hashlib.sha256()
     with path.open('rb') as stream:
@@ -271,7 +283,8 @@ class Platform:
     def check_capabilities(self, release, legacy=False):
         q = self.run(['getcap', '-r', str(release)])
         require(q.returncode == 0, 'Cannot inspect file capabilities')
-        ordinary = [str(release / 'libexec/saildroid-app') + ' cap_sys_resource=ep']
+        capability = native_bootstrap_capability(document(release / 'runtime.json'))
+        ordinary = [str(release / 'libexec/saildroid-app') + ' ' + capability]
         lines = q.stdout.splitlines()
         if lines == ordinary:
             return
@@ -283,9 +296,10 @@ class Platform:
             'libexec/saildroid-launch': 'a56df520408a7856f0ae63463c3a13ed4b212001c955332a3c0105be7f72bfbb',
         }
         expected = {str(release / relative) + ' cap_sys_resource=ep' for relative in known_legacy}
-        require(legacy and release.parent == self.path(LEGACY_RELEASES)
+        require(capability == 'cap_sys_resource=ep'
+                and legacy and release.parent == self.path(LEGACY_RELEASES)
                 and len(lines) == len(expected) and set(lines) == expected,
-                'Only the native bootstrap may carry cap_sys_resource=ep')
+                'Only the native bootstrap may carry its declared capabilities')
         for relative, expected_hash in known_legacy.items():
             path = release / relative
             trusted(path, self.prefix)

@@ -39,10 +39,59 @@ The RPM name includes the release ID and owns only
 `/opt/saildroid/releases/<release-id>` plus the two parent directories. It uses
 explicit host ABI requirements, no automatic Android/Bionic providers, no
 stripping, and a gzip payload compatible with the observed RPM 4.16 target.
-Only `libexec/saildroid-app` receives `cap_sys_resource=ep`; the host receives no
-capability. There are no scriptlets. The only permitted APKs are the component's
+The sealed `native_bootstrap` policy selects either `cap_sys_resource=ep` or
+`cap_dac_override,cap_sys_resource=ep` for `libexec/saildroid-app`. Older releases
+default to the former. The bootstrap drops all capabilities before entering
+the host. The sealed `rpm_activation` policy controls installation scriptlets.
+The only permitted APKs are the component's
 `share/manager.apk` and `system/framework/framework-res.apk`; user/test APKs,
 application data, desktop registration, and service units are rejected.
+
+## 2026-11-10 video inventory and OOM policy
+
+`SdMediaProvider` reads video width, height, duration and rotation through the
+existing `MediaMetadataRetriever`, caching the results with each file's size
+and modification time. Existing files are indexed when the updated application
+process starts. Unsupported media retains zero metadata. The provider continues
+to reconcile additions, changes and removals through the same transactional
+inventory.
+
+The r323i build overlays the two changed provider classes into the retained
+297-class runtime, preserves all 2664 existing hidden-API member flags and
+rebuilds all 42 matching boot-image outputs. Its small bootstrap is built after
+byte-identical reproduction of the r323h bootstrap. The complete extracted RPM
+inventory and its declared capabilities must pass verification before activation.
+The package records these inputs and recipes under
+`share/build/qq-video-metadata-20261110`.
+
+The device bootstrap regression covers an inherited -1000 adjustment, an
+already-zero child with `no_new_privs`, and a protected restricted child that
+must fail. Successful entries report UID 100000, adjustment zero, cleared
+effective/permitted/inheritable/ambient capabilities and `no_new_privs=1`.
+
+Run `scripts/packaging/test-setup-vm.py --output NEW_DIRECTORY` as root in a
+Linux build VM for activation and capability regressions. The video APK fixture
+source is `native/media/gstreamer-player/tests/VideoThumbnailActivity.java`.
+Build it with the pinned API28 SDK, a synthetic `clip.mp4` asset and explicit
+READ_EXTERNAL_STORAGE permission. Launch through the ordinary app entry point
+with valid device video fixtures. It checks OOM adjustment, seven thumbnail
+operations and MediaStore metadata against the retriever's actual values.
+
+The Xiaomi Pad 5/NABU device validation installed
+`saildroid-runtime-api28-r323i-dev-20261110-0.321.60-67.aarch64` and obtained
+`rpm -V` success plus setup status `ready`. The RPM SHA256 is
+`9c42d73435e0aff707b7819ef994fa0a53ed304ff44bfc906acc05f2c283d4ef`.
+The SDK build used `SailfishOS-latest-aarch64` through
+`tools/sailfish-wsl-build.sh` and retained its command, input manifests and
+payload recipes in the build records.
+
+All 68 activation/capability cases and the three device bootstrap cases passed.
+The ordinary APK fixture verified seven synthetic thumbnail operations and
+metadata for three valid 720x1280 videos. A second ordinary-entry run verified
+mini and 180x135 grid thumbnails for each real video with varied pixels. The
+application had OOM adjustment zero, cleared active capability sets and
+`no_new_privs=1`. The installation and device probes retained a single boot ID.
+QQ's video picker still requires a physical visual retest.
 
 ## 2026-11-09 API28 Java compatibility updates
 

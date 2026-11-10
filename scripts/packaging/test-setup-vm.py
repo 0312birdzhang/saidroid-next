@@ -251,6 +251,46 @@ for case,error in [('directory-mode','immutable'),('directory-group','kernel-bin
 with fixture()as host:
  release(host,'api29-a');owned(host.path('/home/art'));owned(host.path('/home/art/apps'))
  must_fail('unrelated-root-owned-app-storage-still-refused',lambda:action(host,'change','api29-a'),'Existing storage ownership differs')
+for declared in (None, 'cap_sys_resource=ep', 'cap_dac_override,cap_sys_resource=ep'):
+ with fixture() as host:
+  root = release(host, 'api28-cap-policy', api=28)
+  runtime = m.document(root / 'runtime.json')
+  if declared is not None:
+   runtime['native_bootstrap'] = dict(schema='saildroid-native-bootstrap-v1', capabilities=declared)
+   (root / 'runtime.json').write_text(json.dumps(runtime))
+  capability = declared or 'cap_sys_resource=ep'
+  subprocess.run(['setcap', capability, str(root / 'libexec/saildroid-app')], check=True)
+  m.Platform.check_capabilities(host, root)
+  record('native-bootstrap-policy-accepted-' + (declared or 'legacy-default'))
+  subprocess.run(['setcap', 'cap_sys_resource=ep', str(root / 'libexec/saildroid-host')], check=True)
+  must_fail('native-bootstrap-extra-path-refused-' + capability,
+            lambda: m.Platform.check_capabilities(host, root), 'Only the native bootstrap')
+  subprocess.run(['setcap', '-r', str(root / 'libexec/saildroid-host')], check=True)
+  subprocess.run(['setcap', capability.replace('=ep', ',cap_net_bind_service=ep'),
+                  str(root / 'libexec/saildroid-app')], check=True)
+  must_fail('native-bootstrap-extra-capability-refused-' + capability,
+            lambda: m.Platform.check_capabilities(host, root), 'Only the native bootstrap')
+  subprocess.run(['setcap', '-r', str(root / 'libexec/saildroid-app')], check=True)
+  must_fail('native-bootstrap-missing-capability-refused-' + capability,
+            lambda: m.Platform.check_capabilities(host, root), 'Only the native bootstrap')
+with fixture() as host:
+ root = release(host, 'api28-cap-mismatch', api=28)
+ runtime = m.document(root / 'runtime.json')
+ runtime['native_bootstrap'] = dict(schema='saildroid-native-bootstrap-v1', capabilities='cap_dac_override,cap_sys_resource=ep')
+ (root / 'runtime.json').write_text(json.dumps(runtime))
+ subprocess.run(['setcap', 'cap_sys_resource=ep', str(root / 'libexec/saildroid-app')], check=True)
+ must_fail('native-bootstrap-declared-capability-mismatch-refused',
+           lambda: m.Platform.check_capabilities(host, root), 'Only the native bootstrap')
+for policy in (
+ {'schema': 'unknown', 'capabilities': 'cap_sys_resource=ep'},
+ {'schema': 'saildroid-native-bootstrap-v1', 'capabilities': 'cap_dac_override=ep'},
+ {'schema': 'saildroid-native-bootstrap-v1', 'capabilities': 'cap_sys_resource,cap_net_bind_service=ep'},
+ {'schema': 'saildroid-native-bootstrap-v1', 'capabilities': 'cap_sys_resource=ep', 'path': 'libexec/saildroid-host'},
+ {}, 'cap_sys_resource=ep',
+):
+ must_fail('unsupported-native-bootstrap-policy-refused-' + json.dumps(policy),
+           lambda: m.native_bootstrap_capability({'native_bootstrap': policy}),
+           'Unsupported native bootstrap capability policy')
 if args.legacy_bootstrap_root:
  # Exercise actual getcap output from real, never-executed native bootstrap
  # copies. The VM's local temporary filesystem preserves security.capability.

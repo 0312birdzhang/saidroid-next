@@ -117,6 +117,10 @@ for name in ('SPECS', 'SOURCES', 'BUILD', 'BUILDROOT', 'RPMS', 'SRPMS'):
 installed = '/opt/saildroid/releases/' + a.release_id
 name = 'saildroid-runtime-' + a.release_id
 setup = runpy.run_path(str(root / 'bin/saildroid-setup')) if 'bin/saildroid-setup' in expected['files'] else None
+bootstrap_capability = 'cap_sys_resource=ep'
+if runtime.get('native_bootstrap') is not None:
+    assert setup and 'native_bootstrap_capability' in setup, 'Bootstrap policy requires an updated setup helper'
+    bootstrap_capability = setup['native_bootstrap_capability'](runtime)
 auto_activate = False
 if runtime.get('rpm_activation') is not None:
     assert setup and 'rpm_activation_enabled' in setup, 'Activation policy requires an updated setup helper'
@@ -144,7 +148,7 @@ lines = [
 for directory in expected['directories']:
     lines.append('%dir %attr(0755,root,root) ' + installed + '/' + directory)
 for relative, value in expected['files'].items():
-    capability = '%caps(cap_sys_resource=ep) ' if relative == 'libexec/saildroid-app' else ''
+    capability = '%caps(' + bootstrap_capability + ') ' if relative == 'libexec/saildroid-app' else ''
     lines.append(capability + '%%attr(%04o,root,root) ' % value['mode'] + installed + '/' + relative)
 for relative in expected['symlinks']:
     lines.append(installed + '/' + relative)
@@ -168,7 +172,7 @@ else:
     assert not scripts.strip(), 'Unexpected installation scriptlets'
 capabilities = query('--qf', '[%{FILENAMES} %{FILECAPS}\n]')
 cap_lines = [line for line in capabilities.splitlines() if 'cap_' in line]
-assert cap_lines == [installed + '/libexec/saildroid-app cap_sys_resource=ep']
+assert cap_lines == [installed + '/libexec/saildroid-app ' + bootstrap_capability]
 extract = a.output.resolve() / 'extracted'
 extract.mkdir()
 with (a.output / 'extract.log').open('wb') as log:
