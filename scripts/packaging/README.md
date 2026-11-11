@@ -209,7 +209,7 @@ The r323e runtime records its engine inputs in
 `share/build/webview-runtime-20261109/runtime-manifest.json`. Install the
 runtime and these aarch64 engine packages in one RPM transaction.
 
-| Package | Version and release |
+| Package | Minimum version and release (`>=`) |
 | --- | --- |
 | libepoxy | 1.5.11-768.1 |
 | libwpe | 1.17.0-768.1 |
@@ -218,16 +218,33 @@ runtime and these aarch64 engine packages in one RPM transaction.
 | wpewebkit2-qt5 | 2.54.2-768.1 |
 
 Verify the repository signature, each RPM signature, and the payload SHA-256
-from the signed primary metadata before staging. The engine repository is
-`https://specsierra.github.io/atlantic-engine/aarch64/`. Build 768.1 corresponds
-to Atlantic source revision `b36d176b1374aab8c6b4bde582d10bf6ff50819e`.
+from the signed primary metadata before staging. Download the aarch64 RPMs
+from the rolling engine repository. Build 768.1 corresponds to Atlantic source
+revision `b36d176b1374aab8c6b4bde582d10bf6ff50819e`. Later builds satisfy these
+minimum version requirements. [Engine download directory](https://specsierra.github.io/atlantic-engine/aarch64/) · [Repository configuration](https://specsierra.github.io/atlantic-engine/atlantic-ci.repo)
+
+To install the dependencies as root on Sailfish OS, import the repository key
+and add its configuration.
+
+```sh
+rpm --import https://specsierra.github.io/atlantic-engine/RPM-GPG-KEY-atlantic-ci
+zypper ar -f https://specsierra.github.io/atlantic-engine/atlantic-ci.repo
+zypper ref atlantic-ci
+zypper in libepoxy libwpe wpebackend-fdo wpewebkit2 wpewebkit2-qt5
+```
+
+The key fingerprint is `A6CCF45E59F159B687BF268C5AE893A84F8F9C4B`.
+`build-runtime-rpm-vm.py` verifies the manifest hash recorded in
+`host_webview_runtime` and derives each configured dependency's minimum RPM
+epoch, version and release from `engine_rpms`.
 
 WebKit uses its compiled `/opt/wpe-sfos` helper paths. SailDroid packages the
 required compatibility library closure under its own `lib/webview` directory,
 with source records and license notices. `sdwebview-host` expands
 `${SD_COMPONENT}` to its canonical release root when configuring the isolated
 process. The libsoup boundary resolves its SONAME through that configured
-library path. The runtime RPM pins all five engine dependencies. The
+library path. The runtime RPM requires at least the recorded versions of all
+five engine dependencies. The
 release-owned `libegl-stubs.so` supplies EGL 1.5 entry points through the
 platform KHR functions. Configure both `LD_PRELOAD` and
 `ATLANTIC_LD_PRELOAD`, and propagate the release library path through

@@ -86,6 +86,30 @@ if 'bin/saildroid-setup' in expected['files']:
     # Python's actual file provider is portable across python3/python3-base
     # package naming. The helper independently checks its supported version.
     requirements.add('/usr/bin/python3')
+webview = runtime.get('host_webview_runtime')
+if webview is not None:
+    manifest_relative = PurePosixPath(webview['manifest'])
+    manifest_path = (root / manifest_relative).resolve()
+    assert (not manifest_relative.is_absolute()
+            and manifest_path.is_relative_to(root)), 'WebView manifest outside release'
+    assert digest(manifest_path) == webview['manifest_sha256'], 'WebView manifest hash mismatch'
+    engine = json.loads(manifest_path.read_text())
+    packages = {package['name']: package for package in engine['engine_rpms']}
+    assert len(packages) == len(engine['engine_rpms']), 'Duplicate WebView engine package'
+    # Recorded engine inputs define minimum versions for the rolling repository.
+    for package_name in webview['dependency_packages']:
+        assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', package_name), 'Unsafe WebView package name'
+        package = packages[package_name]
+        assert package['arch'] in ('aarch64', 'noarch'), 'Unsupported WebView package architecture'
+        version = package['version']
+        epoch = str(version.get('epoch') or '0')
+        evr = version['ver'] + '-' + version['rel']
+        if epoch != '0':
+            evr = epoch + ':' + evr
+        assert re.fullmatch(
+            r'(?:[0-9]+:)?[A-Za-z0-9][A-Za-z0-9._+~^]*-[A-Za-z0-9][A-Za-z0-9._+~^]*',
+            evr), 'Unsafe WebView package version'
+        requirements.add(package_name + ' >= ' + evr)
 host_elf = []
 for relative in expected['files']:
     file = root / relative
@@ -165,6 +189,7 @@ rpm = rpms[0]
 query = lambda *args: subprocess.check_output(['rpm', '-qp', *args, str(rpm)], text=True)
 identity = query('--qf', '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}')
 assert identity == name + '-' + a.version + '-' + a.rpm_release + '.aarch64'
+assert requirements <= set(query('--requires').splitlines()), 'RPM omitted declared host requirements'
 scripts = query('--scripts')
 if setup and 'check_rpm_scripts' in setup:
     setup['check_rpm_scripts'](runtime, a.release_id, scripts)
