@@ -30,6 +30,7 @@
 #include "include/wpe-input.h"
 #undef WPE_EXPORT
 #undef __WPE_H_INSIDE__
+#include "include/webview-geometry.h"
 
 static void logMessage(QtMsgType, const QMessageLogContext &, const QString &message)
 { fprintf(stderr, "%s\n", message.toUtf8().constData()); fflush(stderr); }
@@ -174,7 +175,7 @@ class WebHost : public QObject {
         }
         if (op == "touch") {
             // The Android View has already performed hit testing. Feed its
-            // physical pixels to libwpe once; WPEQtView's Qt touch adapter would
+            // host viewport pixels to libwpe once; WPEQtView's Qt touch adapter would
             // divide by DPR before WebKit divides again (measured at DPR 2.625).
             using Getter=void *(*)(const void *);
             using GetObject=void *(*)(void *);
@@ -192,7 +193,10 @@ class WebHost : public QObject {
             if (action<0||action>3) return;
             if (action==0) touchActive=true;
             if (!touchActive) return;
-            if (action==0||action==2) {touchX=qRound(object.value("x").toDouble());touchY=qRound(object.value("y").toDouble());}
+            if (action==0||action==2) {
+                touchX=qRound(sd_webview_coordinate(object.value("x").toDouble(),object.value("viewWidth").toInt(),width));
+                touchY=qRound(sd_webview_coordinate(object.value("y").toDouble(),object.value("viewHeight").toInt(),height));
+            }
             const uint32_t time=uint32_t(object.value("time").toDouble(lifetime.elapsed()));
             const auto type=action==0?wpe_input_touch_event_type_down:
                 (action==2?wpe_input_touch_event_type_motion:wpe_input_touch_event_type_up);

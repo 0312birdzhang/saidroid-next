@@ -10,7 +10,22 @@ import java.util.concurrent.TimeUnit;
 
 /** One isolated Qt/WPE host per WebView. The UI thread never waits for IPC. */
 public final class SdWebEngine {
-    private static final int MAX_FRAME_BYTES = 2160 * 4096 * 4;
+    public static final int MAX_HOST_WIDTH=2160,MAX_HOST_HEIGHT=4096;
+    public static final int MAX_FRAME_BYTES=MAX_HOST_WIDTH*MAX_HOST_HEIGHT*4;
+
+    /** Match the native host's dimensions AND byte budget without distorting pages. */
+    public static int[] hostSize(int requestedWidth, int requestedHeight) {
+        int w=Math.max(1,requestedWidth),h=Math.max(1,requestedHeight);
+        double scale=Math.min(1.0,Math.min((double)MAX_HOST_WIDTH/w,(double)MAX_HOST_HEIGHT/h));
+        scale=Math.min(scale,Math.sqrt((double)MAX_FRAME_BYTES/4/w/h));
+        return new int[]{Math.max(1,(int)Math.floor(w*scale)),Math.max(1,(int)Math.floor(h*scale))};
+    }
+
+    public static JSONObject touchCommand(int action,float x,float y,long time,int viewWidth,int viewHeight)
+            throws org.json.JSONException {
+        return new JSONObject().put("op","touch").put("action",action).put("x",x).put("y",y)
+                .put("viewWidth",viewWidth).put("viewHeight",viewHeight).put("time",time);
+    }
     public interface Listener {
         void event(JSONObject event);
         void frame(Bitmap bitmap, long sequence);
@@ -35,7 +50,7 @@ public final class SdWebEngine {
 
     public SdWebEngine(File directory, int w, int h, Listener target) {
         helper = helperPath(); profile = new File(directory,"webview-host").getAbsolutePath();
-        width = Math.max(1,w); height = Math.max(1,h); listener = target;
+        int[] size=hostSize(w,h);width=size[0];height=size[1];listener=target;
         Thread starter = new Thread(new Runnable() { public void run() { start(); } },"sd-webview-reader");
         starter.setDaemon(true);starter.start();
     }
@@ -73,7 +88,7 @@ public final class SdWebEngine {
                     if("frame".equals(event.optString("event"))){
                         final int w=event.getInt("width"),h=event.getInt("height"),count=event.getInt("bytes");
                         final long seq=event.getLong("seq");
-                        if(w<1||h<1||w>2160||h>4096||(long)w*h*4!=count||count>MAX_FRAME_BYTES||!"rgba8888".equals(event.getString("format")))throw new IOException("invalid frame geometry");
+                        if(w<1||h<1||w>MAX_HOST_WIDTH||h>MAX_HOST_HEIGHT||(long)w*h*4!=count||count>MAX_FRAME_BYTES||!"rgba8888".equals(event.getString("format")))throw new IOException("invalid frame geometry");
                         if(pixels==null||pixels.length!=count)pixels=new byte[count];
                         input.readFully(pixels);final byte[] framePixels=pixels;
                         ui.post(new Runnable(){public void run(){

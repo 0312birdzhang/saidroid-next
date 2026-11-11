@@ -37,6 +37,28 @@ const char *bionic_dlerror(void){
     if(local_error[0]){static _Thread_local char result[256];memcpy(result,local_error,sizeof(result));local_error[0]=0;return result;}
     return guest_error?guest_error():NULL;
 }
+static int art_owned_library(const char *filename){
+    if(!filename)return 0;
+    const char *name=strrchr(filename,'/');name=name?name+1:filename;
+    return!strcmp(name,"libjavacore.so")||!strcmp(name,"libopenjdk.so")||
+           !strcmp(name,"libopenjdkjvm.so")||!strcmp(name,"libopenjdkjvmti.so");
+}
+static int api28_base(void){
+    return access("/system/etc/ld.config.28.txt",F_OK)==0;
+}
+void *bionic_dlopen(const char *filename,int flags){
+    pthread_once(&once,initialize);
+    if(api28_base()&&art_owned_library(filename)){
+        void *handle=dlopen(filename,flags);
+        if(handle){local_error[0]=0;return handle;}
+        const char *error=dlerror();
+        snprintf(local_error,sizeof(local_error),"glibc loader: %s",error?error:"unavailable");
+        return NULL;
+    }
+    local_error[0]=0;
+    if(!guest_open)return failure(ENOSYS,"Android linker unavailable");
+    return guest_open(filename,flags);
+}
 /* AOSP FORCE_LOAD requires distinct mutable globals even for the same input
  * inode. Copy exact FD bytes to a private, unique file, load it through the
  * existing Android linker, then unlink. ELF mappings remain until dlclose.

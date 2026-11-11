@@ -45,6 +45,19 @@ reboot
 
 如果激活事务被中断，使用 `recover` 恢复事务后再检查 `status`。回退保留 APK 和应用数据；它不会凭空安装缺少的旧版本。若此前部署了与旧运行时绑定的应用 AOT 缓存，必须同步恢复对应缓存，或使用工具重新生成；本次开发设备的旧缓存保存在本地备份中，不在发行 RPM 内。运行时与应用缓存的输入哈希必须匹配，不要将新旧版本的缓存混用。
 
+## 4. 非 1080x2160 屏幕与 Android 9 底包
+
+启动器会优先读取宿主 Wayland 输出尺寸；无法读取时回退到已验证的 1080x2160（Pixel 3a XL / bonito）。其他面板也可以在启动应用前显式设置以下环境变量（可写入用户会话的 `~/.config/environment.d/saildroid.conf`）：
+
+```sh
+SAILDROID_DISPLAY_WIDTH=1080
+SAILDROID_DISPLAY_HEIGHT=2340
+```
+
+Android 9（API 28）底包上 `libsdhost29.so` 会把 ART 自带的 `libjavacore.so`/`libopenjdk*.so` 交给 glibc 加载，以匹配随包发布的 Java 核心。WebView 的 Qt/WPE 宿主限制为宽 2160、高 4096、RGBA 帧 9 MiB。初始加载和窗口调整使用同一尺寸预算，超限时按比例缩小；触摸坐标按实际视图与宿主视口尺寸换算，已在预算内的视口保持原尺寸。
+
+机型/厂商等公开身份不是运行时写死的：`scripts/api29/capture-hardware-identity-phone.py` 在目标机上抓取公开字段，打包时经 `package-component.py --hardware-profile` 写入组件 `build.prop`，同时保存身份配置、解析结果和别名表用于追溯。Sailfish 硬件 ID 与 Android 底包 `ro.product.device` 不一致的端口在 `scripts/api29/hardware-identity-aliases.json` 登记别名（如 `fajita → OnePlus6T`）。指定配置但无法确认一致身份时打包报错；未指定配置时保留编译期默认值。
+
 ## 开发认证
 
 设备脚本默认使用 SSH 别名 `bonito`。自行配置 SSH 密钥，或在执行需要 `sshpass` 的历史开发脚本前提供环境变量 `SSHPASS`。公开源码和公开修订包都不携带调试密码或签名私钥。

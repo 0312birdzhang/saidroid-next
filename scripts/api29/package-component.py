@@ -112,7 +112,7 @@ if a.hardware_profile:
  properties,identity=apply_identity(properties,json.loads(a.hardware_profile.read_text()))
  copy(a.hardware_profile,'share/build/hardware-identity/profile.json')
  target=root/'share/build/hardware-identity/resolution.json';target.write_text(json.dumps(identity,indent=2)+'\n')
- for source in ['hardware_identity.py','capture-hardware-identity-phone.py']:
+ for source in ['hardware_identity.py','capture-hardware-identity-phone.py','hardware-identity-aliases.json']:
   copy(repo/'scripts/api29'/source,'share/build/hardware-identity/'+source)
 (root/'build.prop').write_text(properties)
 product_manifest=json.loads((a.product/'manifest.json').read_text())
