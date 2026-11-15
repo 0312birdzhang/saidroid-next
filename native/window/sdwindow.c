@@ -38,7 +38,7 @@ static jmethodID frame_done,input_event,focus_event,visibility_event,closed_even
 static pthread_t thread;
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t ready_condition=PTHREAD_COND_INITIALIZER;
-static int wake_fd=-1,ready,want_frame,dirty,want_raise;
+static int wake_fd=-1,ready,want_frame,dirty,want_raise,want_lower;
 static _Atomic int running;
 static int source_w,source_h,width,height,configured;
 static uint32_t *latest;
@@ -499,7 +499,7 @@ static int callbacks_available(void){
 static void check_callback(void){if((*thread_env)->ExceptionCheck(thread_env)){(*thread_env)->ExceptionDescribe(thread_env);(*thread_env)->ExceptionClear(thread_env);}}
 static void emit_focus(int value){if(cached_focus!=value)host_window_event("focus",value);cached_focus=value;if(callbacks_available()){(*thread_env)->CallStaticVoidMethod(thread_env,host_class,focus_event,(jboolean)value);check_callback();}}
 static void emit_input(int action,int id,float x,float y){if(!callbacks_available())return;perf_mark_input();(*thread_env)->CallStaticVoidMethod(thread_env,host_class,input_event,action,id,x*(float)source_w/width,y*(float)source_h/height,(jlong)monotonic_ns());check_callback();}
-static int request_activation(void){pthread_mutex_lock(&lock);int available=running&&extended_surface;if(available)want_raise=1;pthread_mutex_unlock(&lock);if(available)wake_host();return available;}
+static int request_activation(void){pthread_mutex_lock(&lock);int available=running&&extended_surface;if(available){want_raise=1;want_lower=0;}pthread_mutex_unlock(&lock);if(available){host_window_event("task-background",0);wake_host();}return available;}
 static int request_dump(void){
     if(!atomic_load(&callbacks_ready))return 0;
     JNIEnv *env=NULL;if((*vm)->AttachCurrentThreadAsDaemon(vm,(void**)&env,NULL)!=JNI_OK)return 0;
@@ -743,6 +743,7 @@ static void publish(void){
    }
   }
  }
+ if(want_lower&&extended_surface){qt_extended_surface_lower(extended_surface);want_lower=0;}
  if(want_raise&&extended_surface&&(!hardware_mode()||gpu_startup_mapped||gpu_parent_mapped)){qt_extended_surface_raise(extended_surface);want_raise=0;}
  int frame=want_frame,has_frame=0,bootstrap=0;struct buffer*b=NULL;
  /* A new unmapped parent cannot receive Wayland frame callbacks. Android's
@@ -904,6 +905,15 @@ JNIEXPORT jboolean JNICALL Java_SdWindowHost_nativeDirectCommit(JNIEnv*e,jclass 
     return JNI_TRUE;
 }
 JNIEXPORT void JNICALL Java_SdWindowHost_nativeStop(JNIEnv*e,jclass c){(void)e;(void)c;if(hardware_mode())return;running=0;wake_host();}
+JNIEXPORT jboolean JNICALL Java_SdWindowHost_nativeMoveTaskToBack(JNIEnv*e,jclass c){
+ (void)e;(void)c;
+ pthread_mutex_lock(&lock);
+ int available=running&&extended_surface;
+ if(available){want_lower=1;want_raise=0;}
+ pthread_mutex_unlock(&lock);
+ if(available){host_window_event("task-background",1);wake_host();}
+ return available?JNI_TRUE:JNI_FALSE;
+}
 static jlong display_init(JNIEnv*e,jclass c,jobject weak,jobject queue,jint source){
     (void)c;if(perf_on)perf_display_init_calls++;if(source!=0&&source!=1){(*e)->ThrowNew(e,(*e)->FindClass(e,"java/lang/IllegalArgumentException"),"Unknown display event source");return 0;}
     return (*e)->CallStaticLongMethod(e,frame_class,(*e)->GetStaticMethodID(e,frame_class,"initialize","(Ljava/lang/ref/WeakReference;Landroid/os/MessageQueue;)J"),weak,queue);

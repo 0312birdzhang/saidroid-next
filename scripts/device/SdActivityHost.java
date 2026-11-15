@@ -20,7 +20,7 @@ public final class SdActivityHost {
     private static android.net.Uri pendingInstallerUri;
     private static final ArrayList<Remote> remoteActivities=new ArrayList<Remote>();
     private static final class Remote {
-        Entry caller;ActivityInfo info;String who;int requestCode;boolean awaiting=true,ready;
+        Entry caller;ActivityInfo info;String who;int requestCode;boolean awaiting=true,ready,backgrounded;
     }
     private static boolean remoteLaunchPending(){for(Remote r:remoteActivities)if(r.awaiting)return true;return false;}
     private static volatile List<ActivityManager.RunningTaskInfo> taskSnapshot=Collections.emptyList();
@@ -31,7 +31,7 @@ public final class SdActivityHost {
         task.id=1;
         task.baseActivity=new ComponentName(base.info.packageName,base.info.name);
         task.topActivity=new ComponentName(top.info.packageName,top.info.name);task.numActivities=stack.size();
-        for(Remote remote:remoteActivities)if(remote.ready){task.topActivity=new ComponentName(remote.info.packageName,remote.info.name);task.numActivities++;}
+        for(Remote remote:remoteActivities)if(remote.ready&&!remote.backgrounded){task.topActivity=new ComponentName(remote.info.packageName,remote.info.name);task.numActivities++;}
         task.lastActiveTime=android.os.SystemClock.elapsedRealtime();task.configuration.setTo(displayConfiguration());
         taskSnapshot=Collections.singletonList(task);
     }
@@ -52,6 +52,12 @@ public final class SdActivityHost {
         Binder token;Object record;ActivityInfo info;Intent intent;Activity activity;boolean resumed,stopped;
         IBinder resultTo;String resultWho;int requestCode=-1;
         IBinder remoteResult;
+        final ArrayList<IBinder> remoteObservers=new ArrayList<IBinder>();
+    }
+    private static List<IBinder> remoteCallbacks(Entry entry){
+        ArrayList<IBinder> callbacks=new ArrayList<IBinder>(entry.remoteObservers);
+        if(entry.remoteResult!=null)callbacks.add(entry.remoteResult);
+        return callbacks;
     }
     private static void set(Object object,String name,Object value)throws Exception{Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);f.set(object,value);}
     private static Entry find(IBinder token){for(Entry e:stack)if(e.token==token)return e;throw new IllegalArgumentException("Unknown Activity token");}
@@ -109,8 +115,12 @@ public final class SdActivityHost {
         // QQ can re-submit LoginActivity while its login page is settling.
         // Keep one Activity/window and deliver the new Intent instead of
         // creating a second identical surface.
-        if(remoteResult==null&&requestCode<0&&previous!=null&&previous.activity!=null&&previous.info.packageName.equals(info.packageName)&&previous.info.name.equals(info.name)){
+        boolean reuseRemote=remoteResult!=null&&!hostVisible&&info.launchMode!=ActivityInfo.LAUNCH_MULTIPLE;
+        if((remoteResult==null&&requestCode<0||reuseRemote)&&previous!=null&&previous.activity!=null&&!previous.activity.isFinishing()&&previous.info.packageName.equals(info.packageName)&&previous.info.name.equals(info.name)){
+            // Match ActivityThread launch handling for Binder-delivered app extras.
+            request.setExtrasClassLoader(previous.activity.getClassLoader());
             ActivityThread.currentActivityThread().getInstrumentation().callActivityOnNewIntent(previous.activity,request);
+            if(remoteResult!=null){previous.remoteObservers.add(remoteResult);SdRemoteActivities.ready(remoteResult);}
             refreshTask();
             System.err.println("SDACTIVITY=reused|class="+info.name+"|reason=same-top-component");
             return;
@@ -179,6 +189,17 @@ public final class SdActivityHost {
                 refreshTask();System.err.println("SDACTIVITY=remote_ready|class="+remote.info.name+"|process="+remote.info.processName);
             }
             public void finished(int code,Intent value,boolean foreground){completeRemote(remote,code,value,foreground);}
+            public void backgrounded(){
+                if(!remoteActivities.contains(remote)||remote.backgrounded)return;
+                remote.backgrounded=true;
+                refreshTask();
+                for(Remote active:remoteActivities)if(active.awaiting||active.ready&&!active.backgrounded)return;
+                if(!stack.isEmpty()){
+                    hostVisibility(true);
+                    org.saildroid.host.HostApi.activateSelf();
+                }
+                System.err.println("SDACTIVITY=remote_backgrounded|class="+remote.info.name+"|process="+remote.info.processName);
+            }
             public void failed(String type){System.err.println("SDACTIVITY=remote_failed|class="+remote.info.name+"|type="+type);completeRemote(remote,Activity.RESULT_CANCELED,null,!remote.ready&&hostVisible);}
         });
         System.err.println("SDACTIVITY=remote_requested|class="+info.name+"|process="+info.processName);
@@ -198,12 +219,20 @@ public final class SdActivityHost {
     }
     public static void requestRemoteStart(final Intent intent,final IBinder callback){
         final Intent snapshot=new Intent(intent);
-        post(new Runnable(){public void run(){try{
-            SdRuntime.ensureUiHost();launch(snapshot,null,null,-1,callback,SdApkPackage.NAME);
-        }catch(Exception failure){
-            try{SdRemoteActivities.finish(callback,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
-            throw new IllegalStateException("Remote Activity launch failed",failure);
-        }}});
+        post(new Runnable(){
+            public void run(){
+                try{
+                    SdRuntime.ensureUiHost();
+                    launch(snapshot,null,null,-1,callback,SdApkPackage.NAME);
+                    // Complete the foreground handoff before the queued Activity launch runs.
+                    hostVisibility(true);
+                    org.saildroid.host.HostApi.activateSelf();
+                }catch(Exception failure){
+                    try{SdRemoteActivities.finish(callback,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
+                    throw new IllegalStateException("Remote Activity launch failed",failure);
+                }
+            }
+        });
     }
 
     public static void launchMainActivity(String apk)throws Exception{
@@ -334,7 +363,7 @@ public final class SdActivityHost {
                     System.err.println("SDACTIVITY=result_delivered|request_code="+e.requestCode+"|result_code="+resultCode+"|target="+target.info.name);
                 }
             }
-            if(e.remoteResult!=null)try{SdRemoteActivities.finish(e.remoteResult,resultCode,result,hostVisible);}catch(RemoteException failure){System.err.println("SDACTIVITY=remote_caller_ended");}
+            for(IBinder callback:remoteCallbacks(e))try{SdRemoteActivities.finish(callback,resultCode,result,hostVisible);}catch(RemoteException failure){System.err.println("SDACTIVITY=remote_caller_ended");}
             if(revealed!=null&&hostVisible&&revealed.activity!=null)resume(revealed);
             stop(e);ActivityThread.currentActivityThread().handleDestroyActivity(token,true,0,false,"SailDroid Activity finish");
             stack.remove(e);refreshTask();
@@ -348,11 +377,28 @@ public final class SdActivityHost {
         for(Entry entry:stack)if(entry.activity==null){closeWhenReady=true;return;}
         while(!stack.isEmpty()){
             Entry e=stack.get(stack.size()-1);SdPermissionController.cancel(e.token);pause(e);
-            if(e.remoteResult!=null)try{SdRemoteActivities.finish(e.remoteResult,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
+            for(IBinder callback:remoteCallbacks(e))try{SdRemoteActivities.finish(callback,Activity.RESULT_CANCELED,null,false);}catch(RemoteException ignored){}
             stop(e);thread.handleDestroyActivity(e.token,true,0,false,"Sailfish task closed");stack.remove(e);
         }
         refreshTask();
         try{SdServiceHost.closeAll();}catch(Exception failure){throw new IllegalStateException("Service cleanup failed",failure);}
         System.exit(0);
+    }
+    public static boolean requestMoveTaskToBack(IBinder token,boolean nonRoot){
+        Entry caller=find(token);
+        if(!nonRoot&&caller!=stack.get(0))return false;
+        final Entry root=stack.get(0);
+        final boolean foreground=hostVisible;
+        if(!SdWindowHost.moveTaskToBack())return false;
+        post(new Runnable(){public void run(){
+            if(!stack.contains(root))return;
+            hostVisibility(false);
+            if(foreground)for(IBinder callback:remoteCallbacks(root)){
+                try{SdRemoteActivities.background(callback);}
+                catch(RemoteException ended){System.err.println("SDACTIVITY=remote_caller_ended");}
+            }
+            System.err.println("SDACTIVITY=task_backgrounded|class="+root.info.name+"|retained=true");
+        }});
+        return true;
     }
 }

@@ -40,6 +40,7 @@ static void logMessage(QtMsgType, const QMessageLogContext &, const QString &mes
 
 static constexpr int maxFrameBytes = 2160 * 4096 * 4;
 static constexpr int maxQueuedBytes = maxFrameBytes + 15 * 1024 * 1024;
+static constexpr int maxCommandBytes = 16 * 1024 * 1024 - 4;
 
 class WebHost : public QObject {
     Q_OBJECT
@@ -221,19 +222,23 @@ class WebHost : public QObject {
             else if (errno == EINTR) continue;
             else if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             else { QCoreApplication::exit(13); return; }
-            if (incoming.size() > 4 * 1024 * 1024) { QCoreApplication::exit(14); return; }
-        }
-        for (;;) {
-            if (incoming.size() < 4) return;
-            const auto *p = reinterpret_cast<const unsigned char *>(incoming.constData());
-            quint32 length = (quint32(p[0]) << 24) | (quint32(p[1]) << 16) | (quint32(p[2]) << 8) | p[3];
-            if (length == 0 || length > 4 * 1024 * 1024 - 4) { QCoreApplication::exit(15); return; }
-            if (incoming.size() < int(length)+4) return;
-            QJsonParseError error;
-            const auto doc = QJsonDocument::fromJson(incoming.mid(4,int(length)),&error);
-            incoming.remove(0,int(length)+4);
-            if (error.error != QJsonParseError::NoError || !doc.isObject()) { QCoreApplication::exit(16); return; }
-            dispatch(doc.object());
+            // Consume complete packets before another read. The byte limit
+            // applies to each command even when several arrive together.
+            for (;;) {
+                if (incoming.size() < 4) break;
+                const auto *p = reinterpret_cast<const unsigned char *>(incoming.constData());
+                quint32 length = (quint32(p[0]) << 24) | (quint32(p[1]) << 16) | (quint32(p[2]) << 8) | p[3];
+                if (length == 0 || length > maxCommandBytes) {
+                    qCritical("SDWEBHOST=invalid_command_length|bytes=%u|max=%d", length, maxCommandBytes);
+                    QCoreApplication::exit(15); return;
+                }
+                if (incoming.size() < int(length)+4) break;
+                QJsonParseError error;
+                const auto doc = QJsonDocument::fromJson(incoming.mid(4,int(length)),&error);
+                incoming.remove(0,int(length)+4);
+                if (error.error != QJsonParseError::NoError || !doc.isObject()) { QCoreApplication::exit(16); return; }
+                dispatch(doc.object());
+            }
         }
     }
     void schedule() {

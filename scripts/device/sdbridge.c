@@ -612,7 +612,13 @@ Java_SdBridge_checkGraphicsInit(JNIEnv* env, jclass cls) {
     jclass c = (*env)->FindClass(env, "android/graphics/Bitmap"); CLR();
     APP("Bitmap=%p", (void*)c);
     jfieldID f = (*env)->GetFieldID(env, c, "mNativePtr", "J"); CLR(); APP(" mNativePtr=%p", (void*)f);
-    jmethodID m = (*env)->GetMethodID(env, c, "<init>", "(J[BIIIZZ[BLandroid/graphics/NinePatch$InsetStruct;)V"); CLR(); APP(" ctor=%p", (void*)m);
+    jmethodID m;
+    if (framework_api == 28) {
+        m = (*env)->GetMethodID(env, c, "<init>", "(JIIIZZ[BLandroid/graphics/NinePatch$InsetStruct;)V");
+    } else {
+        m = (*env)->GetMethodID(env, c, "<init>", "(JIIIZ[BLandroid/graphics/NinePatch$InsetStruct;Z)V");
+    }
+    CLR(); APP(" ctor=%p", (void*)m);
     m = (*env)->GetMethodID(env, c, "reinit", "(IIZ)V"); CLR(); APP(" reinit=%p", (void*)m);
     m = (*env)->GetMethodID(env, c, "getAllocationByteCount", "()I"); CLR(); APP(" allocCount=%p", (void*)m);
 

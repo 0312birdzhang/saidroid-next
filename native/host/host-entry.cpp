@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
       return 0;
     }
     auto root = own_root();
-    std::string package, service, activity, provider, process, action, owner, install, desktop, instrumentation;
+    std::string package, service, activity, provider, receiver, process, action, owner, install, desktop, instrumentation;
     bool manager = false, broker = false, runtime = false, session = false;
     fs::path requested_root;
     for (int i = 1; i < argc; i++) {
@@ -286,6 +286,8 @@ int main(int argc, char **argv) {
         activity = value();
       else if (a == "--provider-process")
         provider = value();
+      else if (a == "--receiver-process")
+        receiver = value();
       else if (a == "--process")
         process = value();
       else if (a == "--owner-launch")
@@ -334,9 +336,9 @@ int main(int argc, char **argv) {
       package = "org.saildroid.manager";
     if (broker)
       package = "org.saildroid.binder";
-    if (!instrumentation.empty() && (manager || broker || !service.empty() || !activity.empty() || !provider.empty() || !install.empty()))
+    if (!instrumentation.empty() && (manager || broker || !service.empty() || !activity.empty() || !provider.empty() || !receiver.empty() || !install.empty()))
       throw std::runtime_error("Instrumentation requires its own application host");
-    if (!desktop.empty() && (desktop != package || !service.empty() || !activity.empty() || !provider.empty() || broker))
+    if (!desktop.empty() && (desktop != package || !service.empty() || !activity.empty() || !provider.empty() || !receiver.empty() || broker))
       throw std::runtime_error("Desktop identity differs");
     if (!install.empty() && !manager)
       throw std::runtime_error("Only installer accepts APKs");
@@ -373,6 +375,9 @@ int main(int argc, char **argv) {
     if (!provider.empty() && (!valid_component(provider) || !service.empty() || !activity.empty() || process.empty() ||
                               (owner.empty() && action.empty())))
       throw std::runtime_error("Provider process ownership required");
+    if (!receiver.empty() && (!valid_component(receiver) || !service.empty() || !activity.empty() || !provider.empty() || process.empty() ||
+                              (owner.empty() && action.empty())))
+      throw std::runtime_error("Receiver process ownership required");
     instance =
         package +
         (process.empty() ? "" : ".service." + sha(process).substr(0, 16));
@@ -448,6 +453,7 @@ int main(int argc, char **argv) {
                    {"service", service},
                    {"activity_component", activity},
                    {"provider_component", provider},
+                   {"receiver_component", receiver},
                    {"process_name", process.empty() ? package : process},
                    {"launch_id", launch},
                    {"owner_launch_id", owner},
@@ -642,6 +648,10 @@ int main(int argc, char **argv) {
     }
     if (!provider.empty()) {
       args.push_back("-Dsaidroid.provider=" + provider);
+      args.push_back("-Dsaidroid.process=" + process);
+    }
+    if (!receiver.empty()) {
+      args.push_back("-Dsaidroid.receiver=" + receiver);
       args.push_back("-Dsaidroid.process=" + process);
     }
     if (!install.empty())

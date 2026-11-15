@@ -23,6 +23,8 @@ import org.xmlpull.v1.XmlPullParser;
  */
 public final class SdAppPermissions {
     private static final String ANDROID = "http://schemas.android.com/apk/res/android";
+    private static final String READ_STORAGE = "android.permission.READ_EXTERNAL_STORAGE";
+    private static final String WRITE_STORAGE = "android.permission.WRITE_EXTERNAL_STORAGE";
     private static final Object DECISION_LOCK = new Object();
     private final String owner;
     private final Map<String, Integer> declarations = new HashMap<String, Integer>();
@@ -32,6 +34,10 @@ public final class SdAppPermissions {
     public SdAppPermissions(String apk, String expectedPackage) throws Exception {
         owner = expectedPackage;
         readManifest(apk, expectedPackage, declarations, true);
+        // API28 PackageParser splits WRITE into READ for every supported target.
+        if (android.os.Build.VERSION.SDK_INT == 28 && requested.contains(WRITE_STORAGE)) {
+            requested.add(READ_STORAGE);
+        }
         readManifest(System.getenv("ANDROID_ROOT")+"/framework/framework-res.apk", "android", platformDeclarations, false);
     }
 
@@ -82,12 +88,22 @@ public final class SdAppPermissions {
             int base = protection & PermissionInfo.PROTECTION_MASK_BASE;
             return base == PermissionInfo.PROTECTION_NORMAL
                     || (base == PermissionInfo.PROTECTION_DANGEROUS
-                    && "granted".equals(decisions().getProperty(permission)) && supported(permission));
+                    && runtimeGranted(permission) && supported(permission));
         }
         int base = protection & PermissionInfo.PROTECTION_MASK_BASE;
         // The single hosted app is also the declaring/signing owner. This does
         // not confer signature privileges owned by android or another APK.
         return base == PermissionInfo.PROTECTION_NORMAL || base == PermissionInfo.PROTECTION_SIGNATURE;
+    }
+
+    private boolean runtimeGranted(String permission) {
+        Properties state = decisions();
+        String decision = state.getProperty(permission);
+        if ("granted".equals(decision)) return true;
+        // An explicit READ denial remains authoritative for existing records.
+        return decision == null && android.os.Build.VERSION.SDK_INT == 28
+                && READ_STORAGE.equals(permission) && canRequest(WRITE_STORAGE)
+                && "granted".equals(state.getProperty(WRITE_STORAGE)) && supported(WRITE_STORAGE);
     }
 
     private File decisionFile() {

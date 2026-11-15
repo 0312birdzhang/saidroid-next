@@ -79,7 +79,7 @@ public final class SdRuntime {
             // Publish Android's actual process identity before the Wayland
             // surface maps, so Sailfish can merge its cold-start Cover too.
             android.os.Process.setArgV0(SdApkPackage.processName());
-            boolean serviceProcess=System.getProperty("saidroid.service")!=null||System.getProperty("saidroid.activity")!=null||System.getProperty("saidroid.provider")!=null;
+            boolean serviceProcess=System.getProperty("saidroid.service")!=null||System.getProperty("saidroid.activity")!=null||System.getProperty("saidroid.provider")!=null||System.getProperty("saidroid.receiver")!=null;
             if(SdKernelServices.enabled())SdBridge.startBinderPool();
             if(!serviceProcess&&!SdInstrumentation.requested()){SdWindowHost.install(System.getProperty("saidroid.window.library",System.getenv("ANDROID_ROOT")+"/lib/libsdwindow.so"));String desktopId=System.getenv("SAILDROID_DESKTOP_ID");SdWindowHost.start(SdApkPackage.NAME,desktopId!=null?desktopId:"saildroid-"+SdApkPackage.NAME);}
             // This is an application process. systemMain() initializes Android's
