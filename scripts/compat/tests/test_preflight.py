@@ -17,6 +17,7 @@ from api_inventory import ClassInfo, Inventory, mutf8, read_class, read_dex, rea
 from jni_coverage import audit
 from service_coverage import coverage
 from elf_inventory import scan_applications
+from sdk_coverage import audit as sdk_audit
 
 
 def class_fixture():
@@ -134,6 +135,25 @@ class MetadataTests(unittest.TestCase):
         inventory = Inventory(classes={handle.name: handle})
         self.assertIsNotNone(inventory.resolve('method', '[I', 'clone', '()[I'))
         self.assertIsNotNone(inventory.resolve('method', handle.name, 'invokeExact', '(I)J'))
+
+    def test_sdk_missing_and_inaccessible_members_fail(self):
+        inventory = Inventory(classes={'Fixture': ClassInfo('Fixture', '', (), 1,
+            fields={('privateValue', 'I'): 2}, methods={('run', '()V'): 1})})
+        result = sdk_audit(inventory, {'LFixture;->run()V', 'LFixture;->privateValue:I',
+                                       'LMissing;-><init>()V'})
+        self.assertFalse(result['passed'])
+        self.assertEqual(result['missing_classes'], ['Missing'])
+        self.assertEqual(result['missing_members'], ['LMissing;-><init>()V'])
+        self.assertEqual(result['inaccessible_members'], ['LFixture;->privateValue:I'])
+
+    def test_sdk_inherited_public_member_is_resolved(self):
+        inventory = Inventory(classes={
+            'Parent': ClassInfo('Parent', '', (), 1, methods={('run', '()V'): 1}),
+            'Child': ClassInfo('Child', 'Parent', (), 1),
+        })
+        result = sdk_audit(inventory, {'LChild;->run()V'})
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['resolved_via_inheritance'], 1)
 
 
 class SourceContractTests(unittest.TestCase):

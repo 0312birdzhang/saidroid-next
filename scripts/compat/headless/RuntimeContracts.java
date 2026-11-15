@@ -219,6 +219,12 @@ public final class RuntimeContracts {
                 "Private test Binder setup failed");
         if (Looper.myLooper() == null) Looper.prepareMainLooper();
         switch (group) {
+            case "api28-public-members":
+            case "sip-profile":
+            case "rtp-jni":
+                call(loader.loadClass("org.saildroid.compat.PublicApiContracts"), null,
+                        "run", new Class<?>[]{String.class}, group);
+                return;
             case "activity-task": taskIds(); return;
             case "activity-routing": taskRouting(); return;
             case "bitmap-jni": bitmapJni(); return;

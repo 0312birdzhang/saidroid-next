@@ -131,6 +131,14 @@ def main():
             runtime_inputs.append(dict(path=str(runtime_jar), sha256=digest(runtime_jar)))
             report['runtime'] = dict(root=str(root), metadata_sha256=digest(root / 'runtime.json'),
                                      inputs=runtime_inputs, api=runtime['api'])
+            if api == 28:
+                from sdk_coverage import audit as sdk_audit
+                sdk = sdk_audit(providers)
+                save(arguments.output / 'sdk-coverage.json', sdk)
+                report['phases']['sdk'] = dict(passed=sdk['passed'],
+                    expected_members=sdk['expected_members'], resolved_members=sdk['resolved_members'],
+                    missing_classes=len(sdk['missing_classes']), missing_members=len(sdk['missing_members']),
+                    inaccessible_members=len(sdk['inaccessible_members']))
         else:
             compiled_inputs = []
             for classes in arguments.classes:
@@ -182,7 +190,7 @@ def main():
                 providers=len(native['providers']),
                 potential_missing_libraries=sum(len(row['missing_libraries']) for row in libraries),
                 potential_missing_symbols=sum(len(row['potential_missing_symbols']) for row in libraries))
-        report['passed'] = not jni['problems'] and not route_errors and (
+        report['passed'] = report['phases'].get('sdk', {}).get('passed', True) and not jni['problems'] and not route_errors and (
             not arguments.headless or report['phases']['headless']['passed'])
     except Exception as failure:
         report['error'] = dict(type=type(failure).__name__, message=str(failure))
@@ -210,6 +218,7 @@ def main():
                       'Intent delivery uses a seeded process-local Activity fixture and the production reuse branch.',
                       'Device window, input and hardware acceptance is a separate validation stage.', ''])
         links = [('JNI contracts', 'jni-contracts.json'), ('Service coverage', 'service-coverage.json'),
+                 ('Public SDK coverage', 'sdk-coverage.json'),
                  ('Application linkage', 'application-linkage.json'), ('Native linkage', 'native-linkage.json'),
                  ('Packaged ART results', 'headless/result.json')]
         lines.append(' · '.join('[' + label + '](' + path + ')' for label, path in links

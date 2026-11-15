@@ -42,6 +42,23 @@ public final class MergeRuntimeDex {
             replacement.getAnnotations(), replacement.getFields(), methods);
     }
 
+    private static ClassDef appendFields(ClassDef previous, ClassDef overlay) {
+        List<Field> fields = new ArrayList<>();
+        Set<String> signatures = new HashSet<>();
+        for (Field field : previous.getFields()) {
+            fields.add(field);
+            signatures.add(field.getName() + ":" + field.getType());
+        }
+        for (Field field : overlay.getFields()) {
+            if (signatures.add(field.getName() + ":" + field.getType())) {
+                fields.add(field);
+            }
+        }
+        return new ImmutableClassDef(previous.getType(), previous.getAccessFlags(),
+            previous.getSuperclass(), previous.getInterfaces(), previous.getSourceFile(),
+            previous.getAnnotations(), fields, previous.getMethods());
+    }
+
     private static DexBackedDexFile read(String path) throws Exception {
         try (BufferedInputStream input = new BufferedInputStream(new FileInputStream(path))) {
             return DexBackedDexFile.fromInputStream(Opcodes.forApi(28), input);
@@ -76,6 +93,12 @@ public final class MergeRuntimeDex {
             ClassDef previous = classes.get(definition.getType());
             if (previous != null && arguments.length == 4 && arguments[3].equals("--preserve-synthetic")) {
                 definition = preserveSyntheticMethods(previous, definition);
+            }
+            if (arguments.length == 4 && arguments[3].equals("--append-fields")) {
+                if (previous == null) {
+                    throw new IllegalArgumentException("Field overlay requires an existing class " + definition.getType());
+                }
+                definition = appendFields(previous, definition);
             }
             if (classes.put(definition.getType(), definition) != null) {
                 preserved--;

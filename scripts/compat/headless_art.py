@@ -118,10 +118,15 @@ def run(root, framework, r8, output, repository):
                    if path.is_file() and path.suffix in ('.art', '.oat', '.vdex')]
     if 'system/framework/arm64/boot.art' not in image_paths:
         raise ValueError('Packaged ARM64 boot image is missing')
+    native_inputs = runtime.get('api28_public_api', {}).get('native_libraries', {})
     before = {relative: digest(root / relative) for relative in
               ['runtime.json', 'bin/dalvikvm', 'libexec/dalvikvm-real',
                'lib/libart.so', 'lib/libsdbridge.so', 'lib/libsdwindow.so',
-               'lib/java-cli-bootstrap.jar', 'lib/runtime.jar', *runtime['boot_jars'], *image_paths]}
+               'lib/java-cli-bootstrap.jar', 'lib/runtime.jar', 'linker-config/runtime.cfg',
+               *runtime['boot_jars'], *image_paths, *native_inputs]}
+    for relative, expected in native_inputs.items():
+        if before[relative] != expected:
+            raise ValueError('Public API native input differs: ' + relative)
     result = dict(passed=False, api=runtime['api'], uid=pwd.getpwnam('nobody').pw_uid,
                   framework_registrations_expected=97 if runtime['api'] == 28 else 104,
                   runtime_inputs=before, aosp_sources=manifest,
@@ -190,6 +195,13 @@ def run(root, framework, r8, output, repository):
         with zipfile.ZipFile(work / 'contracts.apk', 'a') as apk, zipfile.ZipFile(work / 'contracts-dex.jar') as dex:
             for item in dex.infolist():
                 apk.writestr(item, dex.read(item))
+            if runtime['api'] == 28:
+                public_api = repository / 'scripts/api28/public-api-compat'
+                restored = (public_api / 'restored-members.txt').read_bytes()
+                pinned = json.loads((public_api / 'sources.json').read_text())
+                if hashlib.sha256(restored).hexdigest() != pinned['restored_members_sha256']:
+                    raise ValueError('Restored public member fixture differs')
+                apk.writestr('org/saildroid/compat/api28-restored-members.txt', restored)
         shutil.copyfile(work / 'contracts.apk', output / 'contracts.apk')
         spec = importlib.util.spec_from_file_location('compat_encoder', repository / 'scripts/api28/encode-platform-dex.py')
         encoder = importlib.util.module_from_spec(spec); spec.loader.exec_module(encoder)
@@ -264,8 +276,11 @@ sys.exit(0 if socket.is_socket() else 1)
                         output / 'weston-ready.log', timeout=20)
         if ready.returncode or compositor.poll() is not None:
             raise RuntimeError('Private headless compositor failed to start')
-        for group in ('core', 'activity-task', 'activity-routing', 'window-jni', 'intent-loader',
-                      'bitmap-jni', 'receiver-jni'):
+        groups = ['core', 'activity-task', 'activity-routing', 'window-jni', 'intent-loader',
+                  'bitmap-jni', 'receiver-jni']
+        if runtime['api'] == 28:
+            groups.extend(['api28-public-members', 'sip-profile', 'rtp-jni'])
+        for group in groups:
             main = 'org.saildroid.compat.CoreContracts' if group == 'core' else 'org.saildroid.compat.PlatformContracts'
             command = namespace_command(root, work, main, group, bootstrap)
             execution = execute(command, output / (group + '.log'))

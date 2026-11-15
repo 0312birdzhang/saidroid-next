@@ -8,11 +8,12 @@
 
 | 检查 | 产出 | 构建判定 |
 | --- | --- | --- |
+| API28 公开 SDK | 官方 revision 6 的 65,961 个公开或受保护成员、缺失类与成员、访问权限 | 缺失成员或访问权限不符导致失败 |
 | JNI 字面量类、字段、方法和注册表 | 完整描述符、继承解析、静态与实例标识、native 声明 | 确定的缺失或签名错误导致失败 |
 | 服务接口与分派路径 | 每个接口签名及分派来源、未覆盖项、委托路由错误 | 已声明操作与实际分派脱节导致失败 |
 | APK Java 与 DEX 引用 | 类型及成员缺口、重复类、输入哈希 | 生成待执行验证的候选清单 |
 | ARM64 ELF 依赖 | DT_NEEDED、符号候选缺口、弱符号、实际扫描的提供库 | 生成静态候选清单 |
-| 打包 ART | 86 个固定 AOSP libcore 用例及六组平台契约、JDK 结果对照 | 用例、启动、输入完整性或清理失败导致失败 |
+| 打包 ART | 86 个固定 AOSP libcore 用例、六组平台契约及 API28 的三组公开 API 契约、JDK 结果对照 | 用例、启动、输入完整性或清理失败导致失败 |
 
 JNI 动态名称、宏展开和 SDK 条件分支进入明确的待解析列表。C 函数原型 ABI、ELF 符号版本、
 命名空间可见性与动态加载由编译和运行时验证补充。服务分派存在性与行为测试分别记录。
@@ -100,10 +101,34 @@ python3 scripts/api29/build-product.py "$inputs" "$output" \
   --compat-only --compat-runtime-root "$runtime"
 ```
 
+### 补齐 API28 的 185 个 SDK 成员
+
+`scripts/api28/build-public-api.py` 针对缺少 185 个成员的 API28 基线执行受限合并。
+`public-api-compat/sources.json` 锁定 Android 9 r61 的 SIP/RTP Java 与 AIDL 源码、两个操作码常量，
+以及 Google API28 arm64 r02 镜像中的 `librtp_jni.so` 和 `libstagefright_amrnb_common.so`。
+构建输入包含已打包运行时、固定 framework/R8 和两份本地库，需要 JDK、aidl 与 dexlib2/baksmali。
+
+```sh
+sudo apt-get install aidl libsmali-java
+python3 scripts/api28/build-public-api.py \
+  --runtime-root "$runtime" --framework "$framework" --r8 "$r8" \
+  --android-libs "$native_inputs" --output "$public_api_output" \
+  --dexlib-classpath '/usr/share/java/*'
+```
+
+输出包含合并后的 `core-libart.jar`、`framework28-classes4.jar`、两份本地库、私有 linker 映射和 `build-result.json`。
+构建逐项比对原有成员限制和反汇编内容，在现有 `Opcodes` 类中追加两个字段，并检查全部 65,961 个 SDK 成员。
+将输出合入 staging 后，需要重建相同 boot classpath 的 42 份 ART/OAT/VDEX 文件，更新 boot/hidden-API 构建记录并重新封装激活清单。
+运行时的 `api28_public_api.native_libraries` 记录新增本地库的相对路径与哈希，供执行前后完整性检查使用。
+
+API28 的 `api28-public-members`、`sip-profile` 和 `rtp-jni` 契约分别检查全部 185 项的应用侧反射访问，
+SIP 配置、Parcelable、参数验证和来电 Intent，以及实际 RTP UDP 端口绑定、释放与编码格式选择。
+SIP 注册、通话服务和 RTP 音频交换需要端到端运行验证。
+
 ### 报告与扩展
 
 远程入口的 `results/report.md` 给出检查摘要，`results/result.json` 给出机器可读判定。
-`jni-contracts.json`、`service-coverage.json`、`application-linkage.json` 和 `native-linkage.json` 保存完整清单。
+`sdk-coverage.json`、`jni-contracts.json`、`service-coverage.json`、`application-linkage.json` 和 `native-linkage.json` 保存完整清单。
 `headless/` 保存各组 ART 日志、JDK 日志、执行输入、夹具 APK 和清理结果。
 检查失败时远程入口仍会收集结果，`remote-run.json` 记录退出状态及下载问题。
 
