@@ -23,6 +23,7 @@ public final class SdAudio implements InvocationHandler {
         }catch(ClassNotFoundException failure){throw new IllegalStateException("Audio channel constant owner unavailable",failure);}
         SdCamera.install();
         SdAudioRecord.install();
+        SdRtp.install();
     }
     private static synchronized JSONObject snapshot()throws Exception{
         long now=SystemClock.uptimeMillis();if(snapshot==null||now-sampled>250){snapshot=new JSONObject(org.saildroid.host.HostApi.audioSnapshot());sampled=now;}return snapshot;
@@ -111,14 +112,43 @@ public final class SdAudio implements InvocationHandler {
             while(owner.get()!=null){String now=snapshot().toString();if(previous!=null&&!previous.equals(now))post.invoke(null,reference,1,0,0,null);previous=now;Thread.sleep(2000);}
         }catch(Exception failure){System.err.println("SDAUDIO=route_monitor_unavailable|type="+failure.getClass().getName());}}},"SailDroid-audio-routes");thread.setDaemon(true);thread.start();
     }
-    // This bridge accepts no Android mode transition; host HAL/call mode is unintegrated.
     private static final int APPLIED_ANDROID_MODE=AudioManager.MODE_NORMAL;
+    private static final Map<IBinder, IBinder.DeathRecipient> communicationOwners = new IdentityHashMap<IBinder, IBinder.DeathRecipient>();
+    private static SdAppPermissions modePermissions;
+    private static synchronized int appliedMode() {
+        return communicationOwners.isEmpty() ? APPLIED_ANDROID_MODE : AudioManager.MODE_IN_COMMUNICATION;
+    }
+    private static synchronized void setMode(int mode, final IBinder token, String owner) throws Exception {
+        if (!SdApkPackage.NAME.equals(owner) || Binder.getCallingUid() != android.os.Process.myUid()) {
+            throw new SecurityException("Audio mode owner differs");
+        }
+        if (modePermissions == null) modePermissions = new SdAppPermissions(SdApkPackage.APK, SdApkPackage.NAME);
+        if (!modePermissions.holds("android.permission.MODIFY_AUDIO_SETTINGS")) throw new SecurityException("Audio settings permission required");
+        if (token == null) throw new IllegalArgumentException("Audio mode owner token required");
+        if (mode != AudioManager.MODE_NORMAL && mode != AudioManager.MODE_IN_COMMUNICATION) {
+            throw new UnsupportedOperationException("Audio mode requires an unavailable host call policy");
+        }
+        if (mode == AudioManager.MODE_NORMAL) {
+            IBinder.DeathRecipient recipient = communicationOwners.remove(token);
+            if (recipient != null) token.unlinkToDeath(recipient, 0);
+        } else if (!communicationOwners.containsKey(token)) {
+            IBinder.DeathRecipient recipient = new IBinder.DeathRecipient() {
+                public void binderDied() { synchronized (SdAudio.class) { communicationOwners.remove(token); } }
+            };
+            token.linkToDeath(recipient, 0);
+            communicationOwners.put(token, recipient);
+        }
+        System.err.println("SDAUDIO=mode_applied|mode=" + appliedMode() + "|backend=pulseaudio-voip-role");
+    }
     @Override public Object invoke(Object proxy,Method method,Object[] args)throws Throwable{
         String name=method.getName();if(name.equals("asBinder"))return binder;if(name.equals("toString"))return "PulseAudio read-only Android audio service";if(name.equals("hashCode"))return System.identityHashCode(proxy);if(name.equals("equals"))return proxy==args[0];
         if(name.equals("getMode")&&method.getDeclaringClass()==IAudioService.class
                 &&method.getReturnType()==Integer.TYPE&&method.getParameterTypes().length==0){
-            System.err.println("SDAUDIO=mode|source=android-applied-mode|mode="+APPLIED_ANDROID_MODE+"|supported_transitions=none|host_call_mode=unintegrated");
-            return APPLIED_ANDROID_MODE;
+            return appliedMode();
+        }
+        if (name.equals("setMode") && method.getDeclaringClass() == IAudioService.class && Build.VERSION.SDK_INT == 28) {
+            setMode((Integer) args[0], (IBinder) args[1], (String) args[2]);
+            return null;
         }
         if(name.equals("isSpeakerphoneOn")&&method.getDeclaringClass()==IAudioService.class
                 &&method.getReturnType()==Boolean.TYPE&&method.getParameterTypes().length==0){

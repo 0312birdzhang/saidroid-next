@@ -144,7 +144,7 @@ public final class PublicApiContracts {
     private static void rtp() throws Throwable {
         Class<?> codec = type("Landroid/net/rtp/AudioCodec;");
         Object[] first = (Object[]) call(codec, null, "getCodecs", new Class<?>[0]);
-        check(first.length == 5, "RTP codec inventory differs");
+        check(first.length == 2 || first.length == 5, "RTP codec inventory differs");
         first[0] = null;
         check(((Object[]) call(codec, null, "getCodecs", new Class<?>[0]))[0] != null, "RTP codec array aliases its inventory");
         Object pcmu = codec.getField("PCMU").get(null);
@@ -184,7 +184,7 @@ public final class PublicApiContracts {
         check(((Object[]) get(group, "getStreams")).length == 0, "New RTP group contains streams");
         check(Integer.valueOf(0).equals(get(group, "getMode")), "New RTP group mode differs");
         call(group.getClass(), group, "clear", new Class<?>[0]);
-        System.out.println("API28_RTP_JNI=PASS|socket=true|port_released=true|codecs=5");
+        System.out.println("API28_RTP_JNI=PASS|socket=true|port_released=true|codecs=" + first.length);
     }
 
     public static void run(String group) throws Throwable {

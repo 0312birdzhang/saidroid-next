@@ -143,6 +143,7 @@ public final class SdAppPermissions {
         if (!SdApkPackage.NAME.equals(owner) || !canRequest(name)) return false;
         if ("android.permission.CAMERA".equals(name)) return SdCamera.available();
         if ("android.permission.RECORD_AUDIO".equals(name)) return SdAudio.recordingAvailable();
+        if ("android.permission.USE_SIP".equals(name)) return android.os.Build.VERSION.SDK_INT == 28 && SdSipService.available();
         boolean write = "android.permission.WRITE_EXTERNAL_STORAGE".equals(name);
         if (!write && !"android.permission.READ_EXTERNAL_STORAGE".equals(name)) return false;
         String shared = System.getenv("EXTERNAL_STORAGE");
@@ -193,6 +194,9 @@ public final class SdAppPermissions {
                         System.err.println("SDPERMISSION=temporary_cleanup_failed|type=" + failure.getClass().getName());
                     }
                 }
+            }
+            if (Boolean.FALSE.equals(choices.get("android.permission.USE_SIP")) && android.os.Build.VERSION.SDK_INT == 28) {
+                SdSipService.permissionChanged();
             }
         }
     }

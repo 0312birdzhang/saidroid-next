@@ -2,6 +2,7 @@
 """Run build-time linkage checks and optional packaged-ART regressions."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import platform
@@ -172,6 +173,15 @@ def main():
             headless = run(arguments.runtime_root.resolve(), arguments.framework.resolve(),
                            arguments.r8.resolve(), arguments.output / 'headless', repository)
             report['phases']['headless'] = headless
+            if api == 28 and runtime.get('sip_service'):
+                spec = importlib.util.spec_from_file_location('sip_contracts', repository / 'scripts/compat/sip/run.py')
+                sip_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(sip_module)
+                sip = sip_module.run(argparse.Namespace(runtime_root=arguments.runtime_root.resolve(),
+                    framework=arguments.framework.resolve(), r8=arguments.r8.resolve(),
+                    output=arguments.output / 'sip', reference_classes=None, sip_references=None,
+                    overlay_root=None, raw_art=False, group=None))
+                report['phases']['sip'] = sip
         app_paths = list(arguments.apk)
         fixture_apk = arguments.output / 'headless/contracts.apk'
         if fixture_apk.exists():
@@ -191,7 +201,7 @@ def main():
                 potential_missing_libraries=sum(len(row['missing_libraries']) for row in libraries),
                 potential_missing_symbols=sum(len(row['potential_missing_symbols']) for row in libraries))
         report['passed'] = report['phases'].get('sdk', {}).get('passed', True) and not jni['problems'] and not route_errors and (
-            not arguments.headless or report['phases']['headless']['passed'])
+            not arguments.headless or report['phases']['headless']['passed']) and report['phases'].get('sip', {}).get('passed', True)
     except Exception as failure:
         report['error'] = dict(type=type(failure).__name__, message=str(failure))
         (arguments.output / 'failure.log').write_text(traceback.format_exc(), encoding='utf-8')

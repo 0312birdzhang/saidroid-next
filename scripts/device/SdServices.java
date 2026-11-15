@@ -49,6 +49,7 @@ public final class SdServices {
         register("trust", SdKeyguard.binder());
         register("notification", SdNotificationPolicy.binder());
         register("audio", SdAudio.binder());
+        if (android.os.Build.VERSION.SDK_INT == 28) register("sip", SdSipService.binder());
         register("power", SdPower.binder());
         register("thermalservice", SdThermal.binder());
         register("deviceidle", SdDeviceIdle.binder());

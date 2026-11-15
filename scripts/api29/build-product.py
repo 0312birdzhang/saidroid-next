@@ -49,6 +49,9 @@ if not java_home:
 java = Path(java_home) / 'bin'
 api = args.api or 29
 fw = args.framework or args.inputs / framework_names[api]
+voip_references = args.output / 'sip-references'
+subprocess.run(['python3', str(repo / 'scripts/api28/build-sip-service.py'), '--references-only',
+                '--framework', str(fw), '--output', str(voip_references)], check=True)
 subprocess.run(['python3',str(repo/'native/webview/tools/check-clinit-safety.py'),str(repo/'scripts/device/SdWebViewProvider.java')],check=True)
 classes=args.output/'classes';classes.mkdir()
 names='SdBridge SdStartup SdClassLoaderNamespaces SdGraphicsEnvironment SdRuntime SdRuntimeDiagnostics SdViewDump SdViewRepair SdRuntimeControl SdKernelServices SdBinderRegistry SdSensorService SdServiceEndpoint SdRemoteServices SdApkPackage SdAppPermissions SdActivityManagerService SdActivityTaskManager SdActivityHost SdServiceHost SdServiceManagerStub SdServices SdPackageManagerService SdStorageManager SdUsers SdDisplayShim SdWindowHost SdWindowManager SdWindowSession SdDisplayFrames SdSurfaceStore SdSurfaceControls SdMaliit SdInputManager SdInputMethods SdConnectivity SdHostState SdPower SdKeyguard SdNotificationPolicy SdContentService SdContentProviders SdSettingsProvider SdWebEngine SdWebInterfaces SdWebCookies SdWebViewProvider SdCryptoProvider'.split()
@@ -63,7 +66,8 @@ sources.append(repo/'scripts/device/SdDownloadsProvider.java')
 sources.append(repo/'native/media/gstreamer-player/SdMediaDataSource.java')
 with (args.output / 'javac.log').open('xb') as log:
     subprocess.run([str(java / 'javac'), '--release', '8', '-encoding', 'UTF-8', '-nowarn',
-                    '-cp', str(fw), '-sourcepath', os.pathsep.join(map(str, java_directories)), '-d', str(classes),
+                    '-cp', os.pathsep.join([str(voip_references / 'references.jar'), str(fw)]),
+                    '-sourcepath', os.pathsep.join(map(str, java_directories)), '-d', str(classes),
                     *map(str, sources)], check=True, stdout=log, stderr=subprocess.STDOUT)
 compiled_sources = set(sources)
 for compiled in classes.rglob('*.class'):
@@ -79,10 +83,12 @@ sources = sorted(compiled_sources)
 with (args.output / 'd8.log').open('xb') as log:
     subprocess.run([str(java / 'java'), '-Xmx2g', '-cp', str(r8), 'com.android.tools.r8.D8',
                     '--release', '--min-api', str(api), '--lib', str(fw),
+                    '--classpath', str(voip_references / 'references.jar'),
                     '--output', str(args.output / 'runtime.jar'),
                     *map(str, sorted(classes.rglob('*.class')))],
                    check=True, stdout=log, stderr=subprocess.STDOUT)
 compatibility.extend(['--framework', str(fw), '--api', str(api), '--classes', str(args.output / 'runtime.jar'),
+                      '--classes', str(voip_references / 'references.jar'),
                       '--output', str(args.output / 'compatibility')])
 for core in args.compat_core:
     compatibility.extend(['--classes', str(core)])
@@ -110,13 +116,14 @@ ime_flags=subprocess.check_output(['pkg-config','--cflags','--libs','gio-2.0'],t
 with(args.output/'ime-build.log').open('xb')as log:
  subprocess.run(['gcc','-shared','-fPIC','-O2','-Wall','-o',str(args.output/'libsdmaliit.so'),str(repo/'native/ime/sdmaliit.c'),'-I'+str(args.output),'-I'+str(java.parent/'include'),'-I'+str(java.parent/'include/linux'),*ime_flags,'-pthread'],check=True,stdout=log,stderr=subprocess.STDOUT)
 subprocess.run(['bash',str(repo/'native/webview/qt-helper/build-host-vm.sh'),str(args.output/'webview-host')],check=True)
-record=dict(api=api,native_nice_limit=40,native_bootstrap=dict(schema='saildroid-native-bootstrap-v1',capabilities='cap_dac_override,cap_sys_resource=ep'),sources={str(f.relative_to(repo)):hashlib.sha256(f.read_bytes()).hexdigest()for f in sources},files={n:hashlib.sha256((args.output/n).read_bytes()).hexdigest()for n in ['runtime.jar','libsdbridge.so','libsdwindow.so','libsdhost29.so','libsdmaliit.so','saildroid-app','saildroid-host','libsdhostapi.so']})
+record=dict(api=api,native_nice_limit=40,native_bootstrap=dict(schema='saildroid-native-bootstrap-v1',capabilities='cap_dac_override,cap_sys_resource=ep'),sources={str(f.relative_to(repo)):hashlib.sha256(f.read_bytes()).hexdigest()for f in sources},files={n:hashlib.sha256((args.output/n).read_bytes()).hexdigest()for n in ['runtime.jar','libsdbridge.so','libsdwindow.so','libsdhost29.so','libsdmaliit.so','saildroid-app','saildroid-host','libsdhostapi.so','libsdvoip.so']})
 record['compatibility_preflight'] = dict(result='compatibility/result.json',
     sha256=hashlib.sha256((args.output / 'compatibility/result.json').read_bytes()).hexdigest())
 record['webview_host']=dict(files={name:hashlib.sha256((args.output/'webview-host'/name).read_bytes()).hexdigest() for name in ['sdwebviewd','sdwebview-host','webview-engine.qml','webview-host-env.json']},sources={str(f.relative_to(repo)):hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted((repo/'native/webview/qt-helper').rglob('*')) if f.is_file() and f.suffix in ['.cpp','.h','.qml','.sh','.md','.json']})
 native_sources=[repo/'native/api29-jni-entries.inc',repo/'scripts/device/sdbridge.c']
 native_sources+=sorted((repo/'native/compat').glob('*.[ch]'))+sorted((repo/'native/window').glob('*.c'))+sorted((repo/'native/hwui').glob('*.c'))+sorted((repo/'native/hwui').glob('*.cpp'))
 native_sources+=sorted((repo/'native/host').glob('*.cpp'))+sorted((repo/'native/host').glob('*.hpp'))+sorted((repo/'native/host').glob('*.c'))+sorted((repo/'native/host').glob('*.sh'))+sorted((repo/'native/host/third_party').glob('*'))
+native_sources+=sorted((repo/'native/rtp').glob('*'))
 record['native_sources']={str(f.relative_to(repo)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_sources}
 record['application_filesystem_policy']=dict(schema='saildroid-app-filesystem-v1',backend='kernel-seccomp-tsync',hardlinks_errno='EACCES',scope='application-and-declared-processes',excluded_roles=['manager','broker','session'],source_sha256=record['native_sources']['native/host/app-filesystem-policy.hpp'])
 if args.hwui_helper:

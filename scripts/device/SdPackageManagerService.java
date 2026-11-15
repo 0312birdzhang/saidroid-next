@@ -105,6 +105,8 @@ public final class SdPackageManagerService implements InvocationHandler {
         }
         if(n.equals("hasSystemFeature")){
             String feature=(String)a[0];
+            if (PackageManager.FEATURE_SIP.equals(feature)) return (Integer)a[1] == 0 && Build.VERSION.SDK_INT == 28 && SdSipService.available();
+            if (PackageManager.FEATURE_SIP_VOIP.equals(feature)) return (Integer)a[1] == 0 && SdRtp.available();
             if ("android.hardware.microphone".equals(feature)) return (Integer)a[1] == 0 && SdAudio.recordingAvailable();
             if((Integer)a[1]!=0||!("android.hardware.camera".equals(feature)||"android.hardware.camera.any".equals(feature)||"android.hardware.camera.front".equals(feature))||!SdCamera.available())return false;
             if("android.hardware.camera.any".equals(feature))return true;
